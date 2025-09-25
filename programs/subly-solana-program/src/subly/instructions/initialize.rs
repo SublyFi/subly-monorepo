@@ -1,8 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::subly::constants::{CONFIG_SEED, DEFAULT_APY_BPS, INDEX_SCALE, VAULT_SEED};
-use crate::subly::state::SublyConfig;
+use crate::subly::constants::{
+    CONFIG_SEED, DEFAULT_APY_BPS, INDEX_SCALE, SUBSCRIPTION_REGISTRY_SEED, VAULT_SEED,
+};
+use crate::subly::state::{SublyConfig, SubscriptionRegistry};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct InitializeArgs {
@@ -22,6 +24,14 @@ pub struct Initialize<'info> {
         bump
     )]
     pub config: Account<'info, SublyConfig>,
+    #[account(
+        init,
+        payer = payer,
+        space = SubscriptionRegistry::INITIAL_SIZE,
+        seeds = [SUBSCRIPTION_REGISTRY_SEED.as_bytes()],
+        bump
+    )]
+    pub subscription_registry: Account<'info, SubscriptionRegistry>,
     #[account(
         init,
         payer = payer,
@@ -51,6 +61,11 @@ pub fn handler(ctx: Context<Initialize>, args: InitializeArgs) -> Result<()> {
     config.paused = false;
     config.bump = ctx.bumps.config;
     config.vault_bump = ctx.bumps.vault;
+
+    let registry = &mut ctx.accounts.subscription_registry;
+    registry.next_service_id = 0;
+    registry.services = Vec::new();
+    registry.bump = ctx.bumps.subscription_registry;
 
     Ok(())
 }

@@ -1,7 +1,12 @@
 pub mod claim_operator;
 pub mod claim_user;
 pub mod fund_rewards;
+pub mod get_subscription_services;
+pub mod get_user_available_services;
 pub mod initialize;
+pub mod register_subscription_service;
 pub mod stake;
+pub mod subscribe_service;
 pub mod sync_yield;
 pub mod unstake;
+pub mod unsubscribe_service;

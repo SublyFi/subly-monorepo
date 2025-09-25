@@ -1,6 +1,9 @@
 use anchor_lang::prelude::*;
 
-use crate::subly::constants::{BASIS_POINTS_DIVISOR, INDEX_SCALE, SECONDS_PER_YEAR};
+use crate::subly::constants::{
+    BASIS_POINTS_DIVISOR, INDEX_SCALE, MAX_SERVICE_DETAILS_LEN, MAX_SERVICE_LOGO_URL_LEN,
+    MAX_SERVICE_NAME_LEN, MAX_SERVICE_PROVIDER_LEN, SECONDS_PER_YEAR,
+};
 use crate::subly::error::ErrorCode;
 
 #[account]
@@ -248,6 +251,306 @@ pub struct UserStake {
     pub bump: u8,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct SubscriptionService {
+    pub id: u64,
+    pub creator: Pubkey,
+    pub name: String,
+    pub monthly_price_usdc: u64,
+    pub details: String,
+    pub logo_url: String,
+    pub provider: String,
+    pub created_at: i64,
+}
+
+impl SubscriptionService {
+    pub const FIXED_SIZE: usize = 8  // id
+        + 32 // creator
+        + 8  // monthly_price_usdc
+        + 8; // created_at
+
+    pub fn space_from_lengths(
+        name_len: usize,
+        details_len: usize,
+        logo_url_len: usize,
+        provider_len: usize,
+    ) -> usize {
+        Self::FIXED_SIZE + 4 + name_len + 4 + details_len + 4 + logo_url_len + 4 + provider_len
+    }
+
+    pub fn space(&self) -> usize {
+        Self::space_from_lengths(
+            self.name.len(),
+            self.details.len(),
+            self.logo_url.len(),
+            self.provider.len(),
+        )
+    }
+}
+
+#[account]
+pub struct SubscriptionRegistry {
+    pub next_service_id: u64,
+    pub services: Vec<SubscriptionService>,
+    pub bump: u8,
+}
+
+impl SubscriptionRegistry {
+    pub const BASE_SIZE: usize = 8 // discriminator
+        + 8 // next_service_id
+        + 4 // services length prefix
+        + 1; // bump
+
+    pub const INITIAL_SIZE: usize = Self::BASE_SIZE;
+
+    pub fn current_size(&self) -> usize {
+        Self::BASE_SIZE
+            + self
+                .services
+                .iter()
+                .map(SubscriptionService::space)
+                .sum::<usize>()
+    }
+
+    pub fn required_size_for_addition(
+        &self,
+        name_len: usize,
+        details_len: usize,
+        logo_len: usize,
+        provider_len: usize,
+    ) -> usize {
+        self.current_size()
+            + SubscriptionService::space_from_lengths(name_len, details_len, logo_len, provider_len)
+    }
+
+    pub fn append_service(&mut self, service: SubscriptionService) -> Result<()> {
+        self.services.push(service);
+        self.next_service_id = self
+            .next_service_id
+            .checked_add(1)
+            .ok_or(ErrorCode::MathOverflow)?;
+        Ok(())
+    }
+
+    pub fn validate_lengths(
+        name_len: usize,
+        details_len: usize,
+        logo_len: usize,
+        provider_len: usize,
+    ) -> Result<()> {
+        require!(name_len <= MAX_SERVICE_NAME_LEN, ErrorCode::StringTooLong);
+        require!(
+            details_len <= MAX_SERVICE_DETAILS_LEN,
+            ErrorCode::StringTooLong
+        );
+        require!(
+            logo_len <= MAX_SERVICE_LOGO_URL_LEN,
+            ErrorCode::StringTooLong
+        );
+        require!(
+            provider_len <= MAX_SERVICE_PROVIDER_LEN,
+            ErrorCode::StringTooLong
+        );
+        Ok(())
+    }
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SubscriptionStatus {
+    Active,
+    PendingCancellation,
+    Cancelled,
+}
+
+impl Default for SubscriptionStatus {
+    fn default() -> Self {
+        SubscriptionStatus::Active
+    }
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
+pub struct UserSubscription {
+    pub id: u64,
+    pub service_id: u64,
+    pub monthly_price_usdc: u64,
+    pub started_at: i64,
+    pub last_payment_ts: i64,
+    pub next_billing_ts: i64,
+    pub pending_until_ts: i64,
+    pub status: SubscriptionStatus,
+}
+
+impl UserSubscription {
+    pub const SIZE: usize = 8  // id
+        + 8  // service_id
+        + 8  // monthly_price_usdc
+        + 8  // started_at
+        + 8  // last_payment_ts
+        + 8  // next_billing_ts
+        + 8  // pending_until_ts
+        + 1; // status
+}
+
+#[account]
+pub struct UserSubscriptions {
+    pub owner: Pubkey,
+    pub next_subscription_id: u64,
+    pub total_active_commitment: u64,
+    pub total_pending_commitment: u64,
+    pub bump: u8,
+    pub subscriptions: Vec<UserSubscription>,
+}
+
+impl UserSubscriptions {
+    pub const INITIAL_SUBSCRIPTION_CAPACITY: usize = 8;
+    pub const BASE_SIZE: usize = 8  // discriminator
+        + 32 // owner
+        + 8  // next_subscription_id
+        + 8  // total_active_commitment
+        + 8  // total_pending_commitment
+        + 1  // bump
+        + 4; // subscriptions length prefix
+
+    pub const INITIAL_SIZE: usize =
+        Self::BASE_SIZE + Self::INITIAL_SUBSCRIPTION_CAPACITY * UserSubscription::SIZE;
+
+    pub fn ensure_owner(&mut self, owner: Pubkey, bump: u8) {
+        if self.owner == Pubkey::default() {
+            self.owner = owner;
+            self.bump = bump;
+            self.next_subscription_id = 0;
+            self.total_active_commitment = 0;
+            self.total_pending_commitment = 0;
+            self.subscriptions = Vec::with_capacity(Self::INITIAL_SUBSCRIPTION_CAPACITY);
+        }
+    }
+
+    pub fn required_size(subscription_count: usize) -> usize {
+        Self::BASE_SIZE + subscription_count * UserSubscription::SIZE
+    }
+
+    pub fn refresh(&mut self, now: i64) -> Result<()> {
+        let mut released: u64 = 0;
+        for subscription in self.subscriptions.iter_mut() {
+            if subscription.status == SubscriptionStatus::PendingCancellation
+                && subscription.pending_until_ts > 0
+                && now >= subscription.pending_until_ts
+            {
+                subscription.status = SubscriptionStatus::Cancelled;
+                subscription.pending_until_ts = 0;
+                released = released
+                    .checked_add(subscription.monthly_price_usdc)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
+        }
+
+        if released > 0 {
+            self.total_pending_commitment = self
+                .total_pending_commitment
+                .checked_sub(released)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn total_committed(&self) -> Result<u64> {
+        self.total_active_commitment
+            .checked_add(self.total_pending_commitment)
+            .ok_or(ErrorCode::MathOverflow.into())
+    }
+
+    pub fn has_active_or_pending_for_service(&self, service_id: u64) -> bool {
+        self.subscriptions.iter().any(|subscription| {
+            subscription.service_id == service_id
+                && (subscription.status == SubscriptionStatus::Active
+                    || subscription.status == SubscriptionStatus::PendingCancellation)
+        })
+    }
+
+    pub fn record_subscription(
+        &mut self,
+        service_id: u64,
+        monthly_price: u64,
+        now: i64,
+        billing_period: i64,
+    ) -> Result<u64> {
+        let next_billing_ts = now
+            .checked_add(billing_period)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let subscription = UserSubscription {
+            id: self.next_subscription_id,
+            service_id,
+            monthly_price_usdc: monthly_price,
+            started_at: now,
+            last_payment_ts: now,
+            next_billing_ts,
+            pending_until_ts: 0,
+            status: SubscriptionStatus::Active,
+        };
+
+        self.subscriptions.push(subscription);
+
+        self.total_active_commitment = self
+            .total_active_commitment
+            .checked_add(monthly_price)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let new_id = self.next_subscription_id;
+        self.next_subscription_id = self
+            .next_subscription_id
+            .checked_add(1)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        Ok(new_id)
+    }
+
+    pub fn begin_cancellation(
+        &mut self,
+        subscription_id: u64,
+        now: i64,
+        billing_period: i64,
+    ) -> Result<(u64, u64, i64)> {
+        let subscription = self
+            .subscriptions
+            .iter_mut()
+            .find(|subscription| subscription.id == subscription_id)
+            .ok_or(ErrorCode::SubscriptionNotFound)?;
+
+        require!(
+            subscription.status == SubscriptionStatus::Active,
+            ErrorCode::SubscriptionNotActive
+        );
+
+        self.total_active_commitment = self
+            .total_active_commitment
+            .checked_sub(subscription.monthly_price_usdc)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let pending_until = if subscription.next_billing_ts > now {
+            subscription.next_billing_ts
+        } else {
+            now.checked_add(billing_period)
+                .ok_or(ErrorCode::MathOverflow)?
+        };
+
+        subscription.status = SubscriptionStatus::PendingCancellation;
+        subscription.pending_until_ts = pending_until;
+
+        self.total_pending_commitment = self
+            .total_pending_commitment
+            .checked_add(subscription.monthly_price_usdc)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        Ok((
+            subscription.service_id,
+            subscription.monthly_price_usdc,
+            pending_until,
+        ))
+    }
+}
+
 impl UserStake {
     pub const INITIAL_ENTRY_CAPACITY: usize = 4;
     pub const BASE_SIZE: usize = 8  // discriminator
@@ -287,7 +590,7 @@ impl UserStake {
     ) -> Result<()> {
         let required_space = Self::required_size(desired_len);
         if account_info.data_len() < required_space {
-            account_info.realloc(required_space, false)?;
+            account_info.resize(required_space)?;
         }
         Ok(())
     }

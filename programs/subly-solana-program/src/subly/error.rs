@@ -30,4 +30,18 @@ pub enum ErrorCode {
     NothingToClaim,
     #[msg("Only the configured authority may perform this action")]
     UnauthorizedAuthority,
+    #[msg("Provided string exceeds the allowed length")]
+    StringTooLong,
+    #[msg("Requested subscription record could not be found")]
+    SubscriptionNotFound,
+    #[msg("Requested service could not be found")]
+    SubscriptionServiceNotFound,
+    #[msg("Subscription is not currently active")]
+    SubscriptionNotActive,
+    #[msg("Subscription already exists for the selected service")]
+    SubscriptionAlreadyExists,
+    #[msg("Subscription commitments would exceed the available budget")]
+    SubscriptionBudgetExceeded,
+    #[msg("Invalid subscription account for the provided user")]
+    InvalidSubscriptionAccount,
 }

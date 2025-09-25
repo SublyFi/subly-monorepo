@@ -6,11 +6,29 @@ pub use subly::constants as subly_constants;
 pub use subly::instructions::claim_operator::ClaimOperator;
 pub use subly::instructions::claim_user::ClaimUser;
 pub use subly::instructions::fund_rewards::FundRewards;
+pub use subly::instructions::get_subscription_services::{
+    GetSubscriptionServices, SubscriptionServiceInfo, SubscriptionServicesFetched,
+};
+pub use subly::instructions::get_user_available_services::{
+    GetUserAvailableServices, UserAvailableServicesFetched,
+};
 pub use subly::instructions::initialize::{Initialize, InitializeArgs};
+pub use subly::instructions::register_subscription_service::{
+    RegisterSubscriptionService, RegisterSubscriptionServiceArgs, SubscriptionServiceRegistered,
+};
 pub use subly::instructions::stake::Stake;
+pub use subly::instructions::subscribe_service::{
+    SubscribeService, SubscribeServiceArgs, SubscriptionActivated,
+};
 pub use subly::instructions::sync_yield::{SyncYield, YieldSnapshot};
 pub use subly::instructions::unstake::Unstake;
-pub use subly::state::{StakeEntry, SublyConfig, UserStake};
+pub use subly::instructions::unsubscribe_service::{
+    SubscriptionCancellationRequested, UnsubscribeService, UnsubscribeServiceArgs,
+};
+pub use subly::state::{
+    StakeEntry, SublyConfig, SubscriptionRegistry, SubscriptionService, SubscriptionStatus,
+    UserStake, UserSubscription, UserSubscriptions,
+};
 
 pub mod __client_accounts_initialize {
     pub use crate::subly::instructions::initialize::__client_accounts_initialize::*;
@@ -38,6 +56,26 @@ pub mod __client_accounts_unstake {
 
 pub mod __client_accounts_sync_yield {
     pub use crate::subly::instructions::sync_yield::__client_accounts_sync_yield::*;
+}
+
+pub mod __client_accounts_register_subscription_service {
+    pub use crate::subly::instructions::register_subscription_service::__client_accounts_register_subscription_service::*;
+}
+
+pub mod __client_accounts_get_subscription_services {
+    pub use crate::subly::instructions::get_subscription_services::__client_accounts_get_subscription_services::*;
+}
+
+pub mod __client_accounts_subscribe_service {
+    pub use crate::subly::instructions::subscribe_service::__client_accounts_subscribe_service::*;
+}
+
+pub mod __client_accounts_get_user_available_services {
+    pub use crate::subly::instructions::get_user_available_services::__client_accounts_get_user_available_services::*;
+}
+
+pub mod __client_accounts_unsubscribe_service {
+    pub use crate::subly::instructions::unsubscribe_service::__client_accounts_unsubscribe_service::*;
 }
 
 declare_id!("GJvB3qPb5UmRoWADHWxgwfepEbTbCMwryzWKaBq3Ys22");
@@ -72,5 +110,34 @@ pub mod subly_solana_program {
 
     pub fn sync_yield(ctx: Context<SyncYield>) -> Result<()> {
         subly::instructions::sync_yield::handler(ctx)
+    }
+
+    pub fn register_subscription_service(
+        ctx: Context<RegisterSubscriptionService>,
+        args: RegisterSubscriptionServiceArgs,
+    ) -> Result<()> {
+        subly::instructions::register_subscription_service::handler(ctx, args)
+    }
+
+    pub fn get_subscription_services(ctx: Context<GetSubscriptionServices>) -> Result<()> {
+        subly::instructions::get_subscription_services::handler(ctx)
+    }
+
+    pub fn subscribe_service(
+        ctx: Context<SubscribeService>,
+        args: SubscribeServiceArgs,
+    ) -> Result<()> {
+        subly::instructions::subscribe_service::handler(ctx, args)
+    }
+
+    pub fn get_user_available_services(ctx: Context<GetUserAvailableServices>) -> Result<()> {
+        subly::instructions::get_user_available_services::handler(ctx)
+    }
+
+    pub fn unsubscribe_service(
+        ctx: Context<UnsubscribeService>,
+        args: UnsubscribeServiceArgs,
+    ) -> Result<()> {
+        subly::instructions::unsubscribe_service::handler(ctx, args)
     }
 }
