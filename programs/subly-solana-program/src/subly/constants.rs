@@ -55,3 +55,5 @@ pub const MAX_SERVICE_PROVIDER_LEN: usize = 128;
 
 #[constant]
 pub const BILLING_PERIOD_SECONDS: i64 = 30 * SECONDS_PER_DAY;
+
+pub const MAX_PAYPAL_RECEIVER_LEN: usize = 256;

@@ -13,6 +13,9 @@ pub use subly::instructions::get_user_available_services::{
     GetUserAvailableServices, UserAvailableServicesFetched,
 };
 pub use subly::instructions::initialize::{Initialize, InitializeArgs};
+pub use subly::instructions::register_paypal_recipient::{
+    PayPalRecipientRegistered, RegisterPayPalRecipient, RegisterPayPalRecipientArgs,
+};
 pub use subly::instructions::register_subscription_service::{
     RegisterSubscriptionService, RegisterSubscriptionServiceArgs, SubscriptionServiceRegistered,
 };
@@ -26,8 +29,8 @@ pub use subly::instructions::unsubscribe_service::{
     SubscriptionCancellationRequested, UnsubscribeService, UnsubscribeServiceArgs,
 };
 pub use subly::state::{
-    StakeEntry, SublyConfig, SubscriptionRegistry, SubscriptionService, SubscriptionStatus,
-    UserStake, UserSubscription, UserSubscriptions,
+    PayPalRecipientType, StakeEntry, SublyConfig, SubscriptionRegistry, SubscriptionService,
+    SubscriptionStatus, UserStake, UserSubscription, UserSubscriptions,
 };
 
 pub mod __client_accounts_initialize {
@@ -72,6 +75,10 @@ pub mod __client_accounts_subscribe_service {
 
 pub mod __client_accounts_get_user_available_services {
     pub use crate::subly::instructions::get_user_available_services::__client_accounts_get_user_available_services::*;
+}
+
+pub mod __client_accounts_register_pay_pal_recipient {
+    pub use crate::subly::instructions::register_paypal_recipient::__client_accounts_register_pay_pal_recipient::*;
 }
 
 pub mod __client_accounts_unsubscribe_service {
@@ -132,6 +139,13 @@ pub mod subly_solana_program {
 
     pub fn get_user_available_services(ctx: Context<GetUserAvailableServices>) -> Result<()> {
         subly::instructions::get_user_available_services::handler(ctx)
+    }
+
+    pub fn register_paypal_recipient(
+        ctx: Context<RegisterPayPalRecipient>,
+        args: RegisterPayPalRecipientArgs,
+    ) -> Result<()> {
+        subly::instructions::register_paypal_recipient::handler(ctx, args)
     }
 
     pub fn unsubscribe_service(

@@ -19,6 +19,8 @@ pub struct SubscriptionActivated {
     pub subscription_id: u64,
     pub service_id: u64,
     pub monthly_price_usdc: u64,
+    pub recipient_type: String,
+    pub receiver: String,
 }
 
 #[derive(Accounts)]
@@ -105,6 +107,10 @@ pub fn handler(ctx: Context<SubscribeService>, args: SubscribeServiceArgs) -> Re
         .ensure_owner(user_key, subscriptions_bump);
 
     ctx.accounts.user_subscriptions.refresh(now)?;
+    require!(
+        ctx.accounts.user_subscriptions.paypal_configured,
+        ErrorCode::PayPalInfoMissing
+    );
 
     let service = ctx
         .accounts
@@ -136,7 +142,10 @@ pub fn handler(ctx: Context<SubscribeService>, args: SubscribeServiceArgs) -> Re
 
     // Ensure account has enough space and rent to append the new subscription.
     let desired_len = ctx.accounts.user_subscriptions.subscriptions.len() + 1;
-    let required_space = UserSubscriptions::required_size(desired_len);
+    let required_space = UserSubscriptions::required_size(
+        desired_len,
+        ctx.accounts.user_subscriptions.receiver_len(),
+    );
     let user_subscriptions_info = ctx.accounts.user_subscriptions.to_account_info();
     if user_subscriptions_info.data_len() < required_space {
         let rent = Rent::get()?;
@@ -161,11 +170,21 @@ pub fn handler(ctx: Context<SubscribeService>, args: SubscribeServiceArgs) -> Re
         BILLING_PERIOD_SECONDS,
     )?;
 
+    let recipient_type = ctx
+        .accounts
+        .user_subscriptions
+        .paypal_recipient_type
+        .as_str()
+        .to_string();
+    let receiver = ctx.accounts.user_subscriptions.paypal_receiver.clone();
+
     emit!(SubscriptionActivated {
         user: user_key,
         subscription_id,
         service_id: service.id,
         monthly_price_usdc: service.monthly_price_usdc,
+        recipient_type,
+        receiver,
     });
 
     Ok(())

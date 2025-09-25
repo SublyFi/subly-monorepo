@@ -47,6 +47,7 @@ describe("subly-solana-program", () => {
   const wallet = provider.wallet as anchor.Wallet;
   const program = anchor.workspace
     .SublySolanaProgram as Program<SublySolanaProgram>;
+  const eventCoder = new anchor.BorshEventCoder(program.idl);
 
   const [configPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
@@ -60,6 +61,10 @@ describe("subly-solana-program", () => {
     [Buffer.from("subscription_registry")],
     program.programId
   );
+  const [walletSubscriptionsPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("user_subscriptions"), wallet.publicKey.toBuffer()],
+    program.programId
+  );
 
   let mint: PublicKey;
   let walletTokenAccount: PublicKey;
@@ -67,6 +72,37 @@ describe("subly-solana-program", () => {
   let streamingServiceId: number;
   let musicServiceId: number;
   let ultraServiceId: number;
+
+  const fetchEventsForSignature = async (signature: string) => {
+    let attempts = 0;
+    let tx = null;
+    while (attempts < 5 && !tx) {
+      tx = await provider.connection.getTransaction(signature, {
+        commitment: "confirmed",
+      });
+      if (!tx) {
+        await sleep(200);
+      }
+      attempts += 1;
+    }
+    const logs = tx?.meta?.logMessages ?? [];
+    const events: Array<{ name: string; data: any }> = [];
+    for (const log of logs) {
+      if (!log.startsWith("Program data: ")) {
+        continue;
+      }
+      const encoded = log.slice("Program data: ".length);
+      try {
+        const decoded = eventCoder.decode(encoded);
+        if (decoded) {
+          events.push(decoded as { name: string; data: any });
+        }
+      } catch (_err) {
+        // ignore non-event logs
+      }
+    }
+    return events;
+  };
 
   before(async () => {
     mint = await createMint(
@@ -208,6 +244,27 @@ describe("subly-solana-program", () => {
         .rpc(),
       "StringTooLong"
     );
+  });
+
+  it("registers PayPal recipient info for the provider wallet", async () => {
+    await program.methods
+      .registerPaypalRecipient({
+        recipientType: "PHONE",
+        receiver: "91-734-234-1234",
+      })
+      .accounts({
+        user: wallet.publicKey,
+        userSubscriptions: walletSubscriptionsPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    const walletSubscriptions: any = await program.account.userSubscriptions.fetch(
+      walletSubscriptionsPda
+    );
+    expect(walletSubscriptions.paypalConfigured).to.eq(true);
+    expect(walletSubscriptions.paypalRecipientType.phone).to.deep.eq({});
+    expect(walletSubscriptions.paypalReceiver).to.eq("91-734-234-1234");
   });
 
   it("stakes, accrues yield, allows operator claim, and enforces user lock", async () => {
@@ -552,6 +609,19 @@ describe("subly-solana-program", () => {
       ],
       program.programId
     );
+
+    await program.methods
+      .registerPaypalRecipient({
+        recipientType: "PHONE",
+        receiver: "91-734-234-1234",
+      })
+      .accounts({
+        user: subscriptionUser.publicKey,
+        userSubscriptions: subscriptionUserSubscriptionsPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([subscriptionUser])
+      .rpc();
     await program.methods
       .stake(stakeAmount, 0)
       .accounts({
@@ -626,7 +696,8 @@ describe("subly-solana-program", () => {
     expect(summaryBefore.availableServiceIds).to.deep.eq(
       [premiumServiceId!, streamingServiceId!, musicServiceId!].sort()
     );
-    await program.methods
+
+    const firstSubscribeSig = await program.methods
       .subscribeService({ serviceId: new anchor.BN(streamingServiceId!) })
       .accounts({
         config: configPda,
@@ -638,6 +709,20 @@ describe("subly-solana-program", () => {
       })
       .signers([subscriptionUser])
       .rpc();
+    const firstSubscribeEvents = await fetchEventsForSignature(firstSubscribeSig);
+    const activationEvent = firstSubscribeEvents.find(
+      (event) => event.name.toLowerCase() === "subscriptionactivated"
+    )?.data;
+    expect(activationEvent, "SubscriptionActivated event missing").to.not.eq(
+      undefined
+    );
+    expect(activationEvent.user.toBase58()).to.eq(
+      subscriptionUser.publicKey.toBase58()
+    );
+    expect(activationEvent.recipientType).to.eq("PHONE");
+    expect(activationEvent.receiver).to.eq("91-734-234-1234");
+    expect(activationEvent.monthlyPriceUsdc.toString()).to.eq("30000000");
+
     await program.methods
       .subscribeService({ serviceId: new anchor.BN(musicServiceId!) })
       .accounts({

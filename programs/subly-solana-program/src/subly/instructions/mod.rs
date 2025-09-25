@@ -4,6 +4,7 @@ pub mod fund_rewards;
 pub mod get_subscription_services;
 pub mod get_user_available_services;
 pub mod initialize;
+pub mod register_paypal_recipient;
 pub mod register_subscription_service;
 pub mod stake;
 pub mod subscribe_service;

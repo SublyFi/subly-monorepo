@@ -44,4 +44,8 @@ pub enum ErrorCode {
     SubscriptionBudgetExceeded,
     #[msg("Invalid subscription account for the provided user")]
     InvalidSubscriptionAccount,
+    #[msg("Invalid PayPal recipient type")]
+    InvalidPayPalRecipientType,
+    #[msg("PayPal recipient information is not configured")]
+    PayPalInfoMissing,
 }

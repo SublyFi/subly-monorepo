@@ -368,6 +368,35 @@ impl Default for SubscriptionStatus {
     }
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PayPalRecipientType {
+    Email,
+    PayPalId,
+    Phone,
+    UserHandle,
+}
+
+impl PayPalRecipientType {
+    pub fn from_str(value: &str) -> Result<Self> {
+        match value.to_ascii_uppercase().as_str() {
+            "EMAIL" => Ok(Self::Email),
+            "PAYPAL_ID" => Ok(Self::PayPalId),
+            "PHONE" => Ok(Self::Phone),
+            "USER_HANDLE" => Ok(Self::UserHandle),
+            _ => Err(ErrorCode::InvalidPayPalRecipientType.into()),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Email => "EMAIL",
+            Self::PayPalId => "PAYPAL_ID",
+            Self::Phone => "PHONE",
+            Self::UserHandle => "USER_HANDLE",
+        }
+    }
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
 pub struct UserSubscription {
     pub id: u64,
@@ -399,6 +428,9 @@ pub struct UserSubscriptions {
     pub total_pending_commitment: u64,
     pub bump: u8,
     pub subscriptions: Vec<UserSubscription>,
+    pub paypal_configured: bool,
+    pub paypal_recipient_type: PayPalRecipientType,
+    pub paypal_receiver: String,
 }
 
 impl UserSubscriptions {
@@ -409,7 +441,10 @@ impl UserSubscriptions {
         + 8  // total_active_commitment
         + 8  // total_pending_commitment
         + 1  // bump
-        + 4; // subscriptions length prefix
+        + 4  // subscriptions length prefix
+        + 1  // paypal_configured
+        + 1  // paypal_recipient_type enum tag
+        + 4; // paypal_receiver length prefix
 
     pub const INITIAL_SIZE: usize =
         Self::BASE_SIZE + Self::INITIAL_SUBSCRIPTION_CAPACITY * UserSubscription::SIZE;
@@ -422,11 +457,18 @@ impl UserSubscriptions {
             self.total_active_commitment = 0;
             self.total_pending_commitment = 0;
             self.subscriptions = Vec::with_capacity(Self::INITIAL_SUBSCRIPTION_CAPACITY);
+            self.paypal_configured = false;
+            self.paypal_recipient_type = PayPalRecipientType::Email;
+            self.paypal_receiver = String::new();
         }
     }
 
-    pub fn required_size(subscription_count: usize) -> usize {
-        Self::BASE_SIZE + subscription_count * UserSubscription::SIZE
+    pub fn required_size(subscription_count: usize, receiver_len: usize) -> usize {
+        Self::BASE_SIZE + subscription_count * UserSubscription::SIZE + receiver_len
+    }
+
+    pub fn receiver_len(&self) -> usize {
+        self.paypal_receiver.len()
     }
 
     pub fn refresh(&mut self, now: i64) -> Result<()> {
@@ -548,6 +590,12 @@ impl UserSubscriptions {
             subscription.monthly_price_usdc,
             pending_until,
         ))
+    }
+
+    pub fn set_paypal_recipient(&mut self, recipient_type: PayPalRecipientType, receiver: String) {
+        self.paypal_configured = true;
+        self.paypal_recipient_type = recipient_type;
+        self.paypal_receiver = receiver;
     }
 }
 
