@@ -5,6 +5,9 @@ use anchor_lang::prelude::*;
 pub use subly::constants as subly_constants;
 pub use subly::instructions::claim_operator::ClaimOperator;
 pub use subly::instructions::claim_user::ClaimUser;
+pub use subly::instructions::find_due_subscriptions::{
+    DueSubscriptionInfo, FindDueSubscriptions, FindDueSubscriptionsArgs, SubscriptionsDue,
+};
 pub use subly::instructions::fund_rewards::FundRewards;
 pub use subly::instructions::get_subscription_services::{
     GetSubscriptionServices, SubscriptionServiceInfo, SubscriptionServicesFetched,
@@ -13,6 +16,9 @@ pub use subly::instructions::get_user_available_services::{
     GetUserAvailableServices, UserAvailableServicesFetched,
 };
 pub use subly::instructions::initialize::{Initialize, InitializeArgs};
+pub use subly::instructions::record_subscription_payment::{
+    RecordSubscriptionPayment, RecordSubscriptionPaymentArgs, SubscriptionPaymentRecorded,
+};
 pub use subly::instructions::register_paypal_recipient::{
     PayPalRecipientRegistered, RegisterPayPalRecipient, RegisterPayPalRecipientArgs,
 };
@@ -81,6 +87,14 @@ pub mod __client_accounts_register_pay_pal_recipient {
     pub use crate::subly::instructions::register_paypal_recipient::__client_accounts_register_pay_pal_recipient::*;
 }
 
+pub mod __client_accounts_find_due_subscriptions {
+    pub use crate::subly::instructions::find_due_subscriptions::__client_accounts_find_due_subscriptions::*;
+}
+
+pub mod __client_accounts_record_subscription_payment {
+    pub use crate::subly::instructions::record_subscription_payment::__client_accounts_record_subscription_payment::*;
+}
+
 pub mod __client_accounts_unsubscribe_service {
     pub use crate::subly::instructions::unsubscribe_service::__client_accounts_unsubscribe_service::*;
 }
@@ -146,6 +160,20 @@ pub mod subly_solana_program {
         args: RegisterPayPalRecipientArgs,
     ) -> Result<()> {
         subly::instructions::register_paypal_recipient::handler(ctx, args)
+    }
+
+    pub fn find_due_subscriptions(
+        ctx: Context<FindDueSubscriptions>,
+        args: FindDueSubscriptionsArgs,
+    ) -> Result<()> {
+        subly::instructions::find_due_subscriptions::handler(ctx, args)
+    }
+
+    pub fn record_subscription_payment(
+        ctx: Context<RecordSubscriptionPayment>,
+        args: RecordSubscriptionPaymentArgs,
+    ) -> Result<()> {
+        subly::instructions::record_subscription_payment::handler(ctx, args)
     }
 
     pub fn unsubscribe_service(

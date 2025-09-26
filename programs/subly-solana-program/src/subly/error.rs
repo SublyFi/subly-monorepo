@@ -48,4 +48,6 @@ pub enum ErrorCode {
     InvalidPayPalRecipientType,
     #[msg("PayPal recipient information is not configured")]
     PayPalInfoMissing,
+    #[msg("Subscription is not payable in its current state")]
+    SubscriptionNotPayable,
 }

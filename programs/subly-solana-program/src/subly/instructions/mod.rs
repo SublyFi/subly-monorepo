@@ -1,9 +1,11 @@
 pub mod claim_operator;
 pub mod claim_user;
+pub mod find_due_subscriptions;
 pub mod fund_rewards;
 pub mod get_subscription_services;
 pub mod get_user_available_services;
 pub mod initialize;
+pub mod record_subscription_payment;
 pub mod register_paypal_recipient;
 pub mod register_subscription_service;
 pub mod stake;

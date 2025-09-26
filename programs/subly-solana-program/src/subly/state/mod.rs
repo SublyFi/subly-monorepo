@@ -597,6 +597,52 @@ impl UserSubscriptions {
         self.paypal_recipient_type = recipient_type;
         self.paypal_receiver = receiver;
     }
+
+    pub fn record_payment(
+        &mut self,
+        subscription_id: u64,
+        now: i64,
+        billing_period: i64,
+    ) -> Result<SubscriptionStatus> {
+        let subscription = self
+            .subscriptions
+            .iter_mut()
+            .find(|subscription| subscription.id == subscription_id)
+            .ok_or(ErrorCode::SubscriptionNotFound)?;
+
+        require!(
+            subscription.status == SubscriptionStatus::Active
+                || subscription.status == SubscriptionStatus::PendingCancellation,
+            ErrorCode::SubscriptionNotPayable
+        );
+
+        subscription.last_payment_ts = now;
+
+        if subscription.status == SubscriptionStatus::Active {
+            let mut next_due = subscription
+                .next_billing_ts
+                .checked_add(billing_period)
+                .ok_or(ErrorCode::MathOverflow)?;
+            let period = billing_period;
+            require!(period > 0, ErrorCode::MathOverflow);
+            while next_due <= now {
+                next_due = next_due
+                    .checked_add(period)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
+            subscription.next_billing_ts = next_due;
+            Ok(SubscriptionStatus::Active)
+        } else {
+            subscription.status = SubscriptionStatus::Cancelled;
+            subscription.pending_until_ts = 0;
+            subscription.next_billing_ts = 0;
+            self.total_pending_commitment = self
+                .total_pending_commitment
+                .checked_sub(subscription.monthly_price_usdc)
+                .ok_or(ErrorCode::MathOverflow)?;
+            Ok(SubscriptionStatus::Cancelled)
+        }
+    }
 }
 
 impl UserStake {
