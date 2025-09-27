@@ -86,9 +86,13 @@ export function StakeInterface() {
         if (matured.length === 0) {
           return null
         }
-        return matured.some((entry) => entry.trancheId === prev)
-          ? prev
-          : matured[0]?.trancheId ?? null
+
+        if (matured.some((entry) => entry.trancheId === prev)) {
+          return prev ?? matured[0].trancheId
+        }
+
+        const first = matured[0]
+        return first ? first.trancheId : null
       })
     } catch (error) {
       console.error("Failed to fetch stake entries", error)
@@ -259,7 +263,7 @@ export function StakeInterface() {
     }
 
     void loadTranches()
-  }, [loadTranches, resetTranches, walletConnected])
+  }, [loadTranches, resetTranches, walletConnected]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8 px-4 sm:px-6 py-6 sm:py-8">
@@ -425,25 +429,31 @@ export function StakeInterface() {
                   </Button>
                 </div>
 
-                {isFetchingTranches ? (
+                {isFetchingTranches && (
                   <div className="flex items-center justify-center py-10 text-muted-foreground">
                     <Loader2 className="h-5 w-5 animate-spin" />
                   </div>
-                ) : availableTranches.length === 0 ? (
+                )}
+
+                {!isFetchingTranches && availableTranches.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     No unlocked tranches available yet. Stakes become available after the selected lock period.
                   </p>
-                ) : (
+                )}
+
+                {!isFetchingTranches && availableTranches.length > 0 && (
                   <div className="space-y-3">
                     {availableTranches.map((entry) => {
                       const principal = formatUsdcFromSmallest(entry.principal)
                       const unlockDate = new Date(entry.lockEndTs * 1000)
+                      const isSelected = selectedTrancheId === entry.trancheId
+
                       return (
                         <button
                           key={entry.trancheId}
                           onClick={() => setSelectedTrancheId(entry.trancheId)}
                           className={`w-full border rounded-lg px-4 py-3 text-left transition-all duration-200 ${
-                            selectedTrancheId === entry.trancheId
+                            isSelected
                               ? "border-primary bg-primary/10"
                               : "border-border bg-card/60 hover:border-primary/40"
                           }`}
@@ -464,7 +474,7 @@ export function StakeInterface() {
                           </div>
                         </button>
                       )
-                    })
+                    })}
                   </div>
                 )}
 
