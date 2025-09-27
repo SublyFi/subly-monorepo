@@ -5,3 +5,10 @@ target
 node_modules
 test-ledger
 .yarn
+.env
+.env.local
+.next
+out
+*.log
+*.tsbuildinfo
+.vscode

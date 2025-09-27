@@ -1,44 +1,138 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Wallet, Menu, X } from "lucide-react"
+import { useCallback, useMemo, useState } from "react";
+
+import { usePrivy } from "@privy-io/react-auth";
+import { useWallets } from "@privy-io/react-auth/solana";
+
+import { Button } from "@/components/ui/button";
+import { useSolanaName } from "@/hooks/use-solana-name";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ExternalLink, Loader2, LogOut, Menu, Wallet, X } from "lucide-react";
+import Image from "next/image";
 
 interface HeaderProps {
-  activeTab: string
-  onTabChange: (tab: string) => void
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
 export function Header({ activeTab, onTabChange }: HeaderProps) {
-  const [isWalletConnected, setIsWalletConnected] = useState(false)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isWalletMenuOpen, setIsWalletMenuOpen] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  const { ready, authenticated, connectWallet, login, logout } = usePrivy();
+  const { wallets, ready: walletsReady } = useWallets();
+
+  const activeWallet = wallets[0];
+  const walletAddress = activeWallet?.address;
+  const accountLabel = activeWallet?.address;
+  const { name: solanaName, isLoading: isNameLoading } =
+    useSolanaName(walletAddress);
+  const walletExplorerUrl = walletAddress
+    ? `https://explorer.solana.com/address/${walletAddress}?cluster=devnet`
+    : undefined;
+
+  const walletLabel = useMemo(() => {
+    if (!walletAddress) {
+      return "Connect";
+    }
+    const displayName = solanaName ?? accountLabel;
+    if (displayName && displayName !== walletAddress) {
+      return displayName;
+    }
+    return `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`;
+  }, [accountLabel, solanaName, walletAddress]);
+
+  const walletConnected =
+    ready && authenticated && walletsReady && wallets.length > 0;
+
+  const handleConnectWallet = useCallback(() => {
+    if (!ready || isDisconnecting) {
+      return;
+    }
+
+    if (!authenticated) {
+      login();
+      return;
+    }
+
+    if (!walletConnected) {
+      connectWallet({ walletChainType: "solana-only" });
+    } else {
+      setIsWalletMenuOpen(true);
+    }
+  }, [
+    authenticated,
+    connectWallet,
+    isDisconnecting,
+    login,
+    ready,
+    walletConnected,
+  ]);
+
+  const handleDisconnectWallet = useCallback(async () => {
+    if (!walletConnected || !walletAddress) {
+      return;
+    }
+
+    try {
+      setIsDisconnecting(true);
+      // Use logout to disconnect the user completely
+      await logout();
+      setIsWalletMenuOpen(false);
+    } catch (error) {
+      console.error("Failed to disconnect wallet", error);
+    } finally {
+      setIsDisconnecting(false);
+    }
+  }, [logout, walletAddress, walletConnected]);
+
+  const handleViewOnExplorer = useCallback(() => {
+    if (!walletExplorerUrl) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.open(walletExplorerUrl, "_blank", "noopener,noreferrer");
+  }, [walletExplorerUrl]);
 
   const tabs = [
     { id: "stake", label: "Stake", active: true },
     { id: "subscription", label: "Subscription", active: true },
     { id: "profile", label: "Profile", active: true },
-  ]
-
-  const handleConnectWallet = () => {
-    setIsWalletConnected(!isWalletConnected)
-  }
+  ];
 
   const handleTabChange = (tabId: string) => {
-    onTabChange(tabId)
-    setIsMobileMenuOpen(false)
-  }
+    onTabChange(tabId);
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <header className="border-b border-border bg-card shadow-sm">
       <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="flex space-x-1">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 border-primary bg-primary/10"></div>
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 border-primary bg-primary/10 -ml-3 sm:-ml-4"></div>
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 border-primary bg-primary/10 -ml-3 sm:-ml-4"></div>
-            </div>
-            <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Subly</span>
+            <Image
+              src="/subly-logo-color.svg"
+              alt="Subly logo"
+              width={42}
+              height={42}
+              className="h-[2.6rem] w-[2.6rem] sm:h-11 sm:w-11"
+              priority
+            />
+            <span className="text-xl sm:text-2xl font-semibold tracking-tight text-[#31a4ab]">
+              Subly
+            </span>
           </div>
 
           <nav className="hidden md:flex items-center space-x-8 lg:space-x-10">
@@ -64,16 +158,56 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
           </nav>
 
           <div className="flex items-center space-x-2 sm:space-x-4">
-            <Button
-              onClick={handleConnectWallet}
-              variant={isWalletConnected ? "secondary" : "default"}
-              className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 sm:py-2.5 font-medium text-xs sm:text-sm"
-              size="sm"
-            >
-              <Wallet className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">{isWalletConnected ? "Connected" : "Connect"}</span>
-              <span className="sm:hidden">{isWalletConnected ? "Connected" : "Connect"}</span>
-            </Button>
+            {walletConnected ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 sm:py-2.5 font-medium text-xs sm:text-sm bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md border border-input">
+                  {isDisconnecting || isNameLoading ? (
+                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                  ) : (
+                    <Wallet className="w-3 h-3 sm:w-4 sm:h-4" />
+                  )}
+                  <span className="hidden sm:inline">{walletLabel}</span>
+                  <span className="sm:hidden">{walletLabel}</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={handleViewOnExplorer}>
+                    <ExternalLink className="w-4 h-4" />
+                    View on Explorer
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleDisconnectWallet}
+                    disabled={isDisconnecting}
+                    variant="destructive"
+                  >
+                    {isDisconnecting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <LogOut className="w-4 h-4" />
+                    )}
+                    Disconnect
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                onClick={handleConnectWallet}
+                variant="default"
+                className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 sm:py-2.5 font-medium text-xs sm:text-sm"
+                size="sm"
+                disabled={!ready || isDisconnecting}
+              >
+                {!ready || isDisconnecting ? (
+                  <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                ) : (
+                  <Wallet className="w-3 h-3 sm:w-4 sm:h-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {ready ? "Connect" : "Initializing"}
+                </span>
+                <span className="sm:hidden">{ready ? "Connect" : "Init"}</span>
+              </Button>
+            )}
 
             <Button
               variant="ghost"
@@ -81,7 +215,11 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
               className="md:hidden p-2"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {isMobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
             </Button>
           </div>
         </div>
@@ -110,5 +248,5 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
         )}
       </div>
     </header>
-  )
+  );
 }
