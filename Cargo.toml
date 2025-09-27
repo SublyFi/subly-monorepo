@@ -4,6 +4,9 @@ members = [
 ]
 resolver = "2"
 
+[patch.crates-io]
+solana-slot-hashes = { path = "patches/solana-slot-hashes" }
+
 [profile.release]
 overflow-checks = true
 lto = "fat"

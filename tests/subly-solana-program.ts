@@ -265,6 +265,24 @@ describe("subly-solana-program", () => {
     expect(walletSubscriptions.paypalConfigured).to.eq(true);
     expect(walletSubscriptions.paypalRecipientType.phone).to.deep.eq({});
     expect(walletSubscriptions.paypalReceiver).to.eq("91-734-234-1234");
+
+    const fetchSig = await program.methods
+      .getPaypalRecipient()
+      .accounts({
+        user: wallet.publicKey,
+        userSubscriptions: walletSubscriptionsPda,
+      })
+      .rpc();
+
+    const fetchEvents = await fetchEventsForSignature(fetchSig);
+    const fetched = fetchEvents.find(
+      (event) => event.name.toLowerCase() === "paypalrecipientfetched"
+    );
+    expect(fetched, "PayPalRecipientFetched event missing").to.not.eq(undefined);
+    expect(fetched!.data.user.toBase58()).to.eq(wallet.publicKey.toBase58());
+    expect(fetched!.data.configured).to.eq(true);
+    expect(fetched!.data.recipientType).to.eq("PHONE");
+    expect(fetched!.data.receiver).to.eq("91-734-234-1234");
   });
 
   it("stakes, accrues yield, allows operator claim, and enforces user lock", async () => {
@@ -564,6 +582,84 @@ describe("subly-solana-program", () => {
     }
   });
 
+  it("fetches the current stake summary for a user", async () => {
+    const connection = provider.connection;
+    const user = Keypair.generate();
+
+    const latestBlockhash = await connection.getLatestBlockhash();
+    const sig = await connection.requestAirdrop(
+      user.publicKey,
+      2 * anchor.web3.LAMPORTS_PER_SOL
+    );
+    await connection.confirmTransaction({
+      signature: sig,
+      ...latestBlockhash,
+    });
+
+    const userTokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      wallet.payer,
+      mint,
+      user.publicKey
+    );
+
+    const stakeAmount = new anchor.BN(5_000_000_000_000);
+    await mintTo(
+      connection,
+      wallet.payer,
+      mint,
+      userTokenAccount.address,
+      wallet.payer,
+      stakeAmount.toNumber()
+    );
+
+    const [userStakePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_position"), user.publicKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .stake(stakeAmount, 0)
+      .accounts({
+        config: configPda,
+        user: user.publicKey,
+        userPosition: userStakePda,
+        userTokenAccount: userTokenAccount.address,
+        vault: vaultPda,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    const signature = await program.methods
+      .getUserStake()
+      .accounts({
+        config: configPda,
+        user: user.publicKey,
+        userPosition: userStakePda,
+      })
+      .signers([user])
+      .rpc();
+
+    const events = await fetchEventsForSignature(signature);
+    const fetched = events.find(
+      (event) => event.name.toLowerCase() === "userstakefetched"
+    );
+
+    expect(fetched).to.not.eq(undefined);
+    const data = fetched!.data;
+    const totalPrincipal = new anchor.BN(data.totalPrincipal.toString());
+    expect(totalPrincipal.eq(stakeAmount)).to.eq(true);
+
+    expect(data.stakeEntries.length).to.eq(1);
+    const firstEntry = data.stakeEntries[0];
+    const trancheId = new anchor.BN(firstEntry.trancheId.toString());
+    const principal = new anchor.BN(firstEntry.principal.toString());
+    expect(trancheId.eq(new anchor.BN(0))).to.eq(true);
+    expect(principal.eq(stakeAmount)).to.eq(true);
+  });
+
   it("subscribes within budget and blocks new contracts until pending payments settle", async () => {
     expect(streamingServiceId).to.not.eq(undefined);
     expect(musicServiceId).to.not.eq(undefined);
@@ -851,6 +947,40 @@ describe("subly-solana-program", () => {
       "0"
     );
     expect(subscriptionsAfterActivate.subscriptions.length).to.eq(2);
+
+    const listSig = await program.methods
+      .getUserSubscriptions()
+      .accounts({
+        user: subscriptionUser.publicKey,
+        userSubscriptions: subscriptionUserSubscriptionsPda,
+        subscriptionRegistry: subscriptionRegistryPda,
+      })
+      .signers([subscriptionUser])
+      .rpc();
+    const listEvents = await fetchEventsForSignature(listSig);
+    const listed = listEvents.find(
+      (event) => event.name.toLowerCase() === "usersubscriptionsfetched"
+    );
+    expect(listed, "UserSubscriptionsFetched event missing").to.not.eq(undefined);
+    const listedData = listed!.data;
+    expect(listedData.user.toBase58()).to.eq(
+      subscriptionUser.publicKey.toBase58()
+    );
+    expect(listedData.subscriptions.length).to.eq(2);
+    const listedIds = listedData.subscriptions
+      .map((entry: any) => Number(entry.serviceId.toString()))
+      .sort((a: number, b: number) => a - b);
+    expect(listedIds).to.deep.eq(
+      [streamingServiceId!, musicServiceId!].sort((a, b) => a - b)
+    );
+    const streamingFromList = listedData.subscriptions.find(
+      (entry: any) => Number(entry.serviceId.toString()) === streamingServiceId
+    );
+    expect(streamingFromList.serviceName).to.eq("Stream Vault");
+    expect(streamingFromList.serviceProvider).to.eq("Vault Media");
+    expect(streamingFromList.status).to.eq("ACTIVE");
+    expect(streamingFromList.monthlyPriceUsdc.toString()).to.eq("30000000");
+
     await expectAnchorError(
       program.methods
         .subscribeService({ serviceId: new anchor.BN(premiumServiceId!) })
@@ -903,6 +1033,33 @@ describe("subly-solana-program", () => {
     const summaryWhilePending = await pullAvailableSummary();
     expect(summaryWhilePending.availableBudget.toString()).to.eq("0");
     expect(summaryWhilePending.availableServiceIds).to.deep.eq([]);
+
+    const listAfterUnsubscribeSig = await program.methods
+      .getUserSubscriptions()
+      .accounts({
+        user: subscriptionUser.publicKey,
+        userSubscriptions: subscriptionUserSubscriptionsPda,
+        subscriptionRegistry: subscriptionRegistryPda,
+      })
+      .signers([subscriptionUser])
+      .rpc();
+    const listAfterEvents = await fetchEventsForSignature(listAfterUnsubscribeSig);
+    const afterListed = listAfterEvents.find(
+      (event) => event.name.toLowerCase() === "usersubscriptionsfetched"
+    );
+    expect(afterListed, "UserSubscriptionsFetched event missing post-unsubscribe").to.not.eq(
+      undefined
+    );
+    const afterData = afterListed!.data;
+    const streamingStatus = afterData.subscriptions.find(
+      (entry: any) => Number(entry.serviceId.toString()) === streamingServiceId
+    )?.status;
+    const musicStatus = afterData.subscriptions.find(
+      (entry: any) => Number(entry.serviceId.toString()) === musicServiceId
+    )?.status;
+    expect(streamingStatus).to.eq("PENDING_CANCELLATION");
+    expect(musicStatus).to.eq("ACTIVE");
+
     await expectAnchorError(
       program.methods
         .subscribeService({ serviceId: new anchor.BN(premiumServiceId!) })

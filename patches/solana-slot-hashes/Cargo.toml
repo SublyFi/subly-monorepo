@@ -1,0 +1,35 @@
+[package]
+name = "solana-slot-hashes"
+version = "2.2.1"
+edition = "2021"
+description = "Types and utilities for the Solana SlotHashes sysvar. (patched to avoid stable sort)"
+license = "Apache-2.0"
+authors = ["Anza Maintainers <maintainers@anza.xyz>"]
+repository = "https://github.com/anza-xyz/agave"
+homepage = "https://anza.xyz/"
+
+[lib]
+name = "solana_slot_hashes"
+path = "src/lib.rs"
+
+[features]
+default = []
+serde = [
+    "dep:serde",
+    "dep:serde_derive",
+    "solana-hash/serde",
+]
+sysvar = [
+    "dep:solana-sdk-ids",
+    "dep:solana-sysvar-id",
+]
+
+[dependencies]
+solana-hash = { version = "2.2.1", default-features = false }
+solana-sdk-ids = { version = "2.2.1", optional = true }
+solana-sysvar-id = { version = "2.2.1", optional = true }
+serde = { version = "1.0.217", optional = true }
+serde_derive = { version = "1.0.217", optional = true }
+
+[dev-dependencies]
+solana-sha256-hasher = "2.2.1"
