@@ -5,6 +5,7 @@ import "./globals.css"
 import { Inter } from "next/font/google"
 
 import { Providers } from "@/components/providers"
+import { Toaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,7 +23,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.className} antialiased`}>
       <body className="min-h-screen bg-background text-foreground">
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <Toaster position="top-right" richColors closeButton />
+        </Providers>
       </body>
     </html>
   )

@@ -1,16 +1,51 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { usePrivy } from "@privy-io/react-auth"
+import { useSignAndSendTransaction, useWallets } from "@privy-io/react-auth/solana"
+import { Connection, PublicKey } from "@solana/web3.js"
+import bs58 from "bs58"
+import { Loader2 } from "lucide-react"
+import { toast } from "sonner"
+
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  fetchUserStakeEntries,
+  formatUsdcFromSmallest,
+  parseUsdcAmount,
+  prepareStakeTransaction,
+  prepareUnstakeTransaction,
+  type StakeEntrySummary,
+} from "@/lib/subly"
+
+const DEVNET_ENDPOINT =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT ?? "https://api.devnet.solana.com"
 
 export function StakeInterface() {
   const [stakeAmount, setStakeAmount] = useState("")
-  const [unstakeAmount, setUnstakeAmount] = useState("")
   const [selectedLockPeriod, setSelectedLockPeriod] = useState("12month")
+  const [isStaking, setIsStaking] = useState(false)
+  const [isUnstaking, setIsUnstaking] = useState(false)
+  const [isFetchingTranches, setIsFetchingTranches] = useState(false)
+  const [availableTranches, setAvailableTranches] = useState<StakeEntrySummary[]>([])
+  const [selectedTrancheId, setSelectedTrancheId] = useState<number | null>(null)
+
+  const { ready, authenticated } = usePrivy()
+  const { wallets, ready: walletsReady } = useWallets()
+  const { signAndSendTransaction } = useSignAndSendTransaction()
+
+  const activeWallet = wallets[0]
+  const walletConnected =
+    ready && authenticated && walletsReady && Boolean(activeWallet?.address)
+
+  const connection = useMemo(
+    () => new Connection(DEVNET_ENDPOINT, "confirmed"),
+    [],
+  )
 
   const lockPeriods = [
     { id: "1month", label: "1 Month", active: false },
@@ -21,13 +56,210 @@ export function StakeInterface() {
 
   const quickAmounts = ["100", "500", "1000", "5000"]
 
-  const handleQuickAmount = (amount: string, type: "stake" | "unstake") => {
-    if (type === "stake") {
-      setStakeAmount(amount)
-    } else {
-      setUnstakeAmount(amount)
-    }
+  const handleQuickStakeAmount = (amount: string) => {
+    setStakeAmount(amount)
   }
+
+  const resetTranches = useCallback(() => {
+    setAvailableTranches([])
+    setSelectedTrancheId(null)
+  }, [])
+
+  const loadTranches = useCallback(async () => {
+    if (!walletConnected || !activeWallet?.address) {
+      resetTranches()
+      return
+    }
+
+    try {
+      setIsFetchingTranches(true)
+      const userPk = new PublicKey(activeWallet.address)
+      const entries = await fetchUserStakeEntries(connection, userPk)
+      const now = Math.floor(Date.now() / 1000)
+
+      const matured = entries.filter(
+        (entry) => entry.principal > 0n && entry.lockEndTs !== 0 && entry.lockEndTs <= now,
+      )
+
+      setAvailableTranches(matured)
+      setSelectedTrancheId((prev) => {
+        if (matured.length === 0) {
+          return null
+        }
+        return matured.some((entry) => entry.trancheId === prev)
+          ? prev
+          : matured[0]?.trancheId ?? null
+      })
+    } catch (error) {
+      console.error("Failed to fetch stake entries", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch available tranches. Please try again.",
+      )
+    } finally {
+      setIsFetchingTranches(false)
+    }
+  }, [activeWallet, connection, resetTranches, walletConnected])
+
+  const selectedTranche = useMemo(
+    () => availableTranches.find((entry) => entry.trancheId === selectedTrancheId) ?? null,
+    [availableTranches, selectedTrancheId],
+  )
+
+  const handleStake = useCallback(async () => {
+    if (!walletConnected || !activeWallet?.address) {
+      toast.error("Connect a wallet before staking")
+      return
+    }
+
+    try {
+      setIsStaking(true)
+
+      const amount = parseUsdcAmount(stakeAmount)
+      const userPublicKey = new PublicKey(activeWallet.address)
+
+      const { transaction, blockhash } = await prepareStakeTransaction(
+        connection,
+        userPublicKey,
+        amount,
+      )
+
+      const serialized = transaction.serialize({ requireAllSignatures: false })
+      const { signature } = await signAndSendTransaction({
+        transaction: serialized,
+        wallet: activeWallet,
+        chain: "solana:devnet",
+      })
+
+      const signatureString = bs58.encode(signature)
+
+      await connection.confirmTransaction(
+        {
+          signature: signatureString,
+          blockhash: blockhash.blockhash,
+          lastValidBlockHeight: blockhash.lastValidBlockHeight,
+        },
+        "confirmed",
+      )
+
+      toast.success(`Staked ${stakeAmount} USDC`, {
+        description: `${signatureString.slice(0, 8)}…${signatureString.slice(-8)}`,
+        action: {
+          label: "Explorer",
+          onClick: () =>
+            window.open(
+              `https://explorer.solana.com/tx/${signatureString}?cluster=devnet`,
+              "_blank",
+              "noopener,noreferrer",
+            ),
+        },
+      })
+
+      setStakeAmount("")
+      await loadTranches()
+    } catch (error) {
+      console.error("Failed to stake USDC", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to stake USDC. Please try again.",
+      )
+    } finally {
+      setIsStaking(false)
+    }
+  }, [
+    activeWallet,
+    connection,
+    loadTranches,
+    signAndSendTransaction,
+    stakeAmount,
+    walletConnected,
+  ])
+
+  const handleUnstake = useCallback(async () => {
+    if (!walletConnected || !activeWallet?.address || selectedTrancheId === null) {
+      toast.error("Select a tranche to unstake")
+      return
+    }
+
+    try {
+      setIsUnstaking(true)
+      const userPublicKey = new PublicKey(activeWallet.address)
+
+      const { transaction, blockhash } = await prepareUnstakeTransaction(
+        connection,
+        userPublicKey,
+        selectedTrancheId,
+      )
+
+      const serialized = transaction.serialize({ requireAllSignatures: false })
+      const { signature } = await signAndSendTransaction({
+        transaction: serialized,
+        wallet: activeWallet,
+        chain: "solana:devnet",
+      })
+
+      const signatureString = bs58.encode(signature)
+
+      await connection.confirmTransaction(
+        {
+          signature: signatureString,
+          blockhash: blockhash.blockhash,
+          lastValidBlockHeight: blockhash.lastValidBlockHeight,
+        },
+        "confirmed",
+      )
+
+      const principalText = selectedTranche
+        ? formatUsdcFromSmallest(selectedTranche.principal)
+        : undefined
+
+      toast.success(
+        principalText
+          ? `Unstaked tranche #${selectedTrancheId} (${principalText} USDC)`
+          : `Unstaked tranche #${selectedTrancheId}`,
+        {
+          description: `${signatureString.slice(0, 8)}…${signatureString.slice(-8)}`,
+          action: {
+            label: "Explorer",
+            onClick: () =>
+              window.open(
+                `https://explorer.solana.com/tx/${signatureString}?cluster=devnet`,
+                "_blank",
+                "noopener,noreferrer",
+              ),
+          },
+        },
+      )
+
+      await loadTranches()
+    } catch (error) {
+      console.error("Failed to unstake", error)
+      toast.error(
+        error instanceof Error ? error.message : "Failed to unstake. Please try again.",
+      )
+    } finally {
+      setIsUnstaking(false)
+    }
+  }, [
+    activeWallet,
+    connection,
+    loadTranches,
+    selectedTranche,
+    selectedTrancheId,
+    signAndSendTransaction,
+    walletConnected,
+  ])
+
+  useEffect(() => {
+    if (!walletConnected) {
+      resetTranches()
+      return
+    }
+
+    void loadTranches()
+  }, [loadTranches, resetTranches, walletConnected])
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8 px-4 sm:px-6 py-6 sm:py-8">
@@ -54,7 +286,7 @@ export function StakeInterface() {
             <CardTitle className="text-xl sm:text-2xl font-bold text-foreground">Stake USDC</CardTitle>
             <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
               Subly turns yield into cash and pays it to your PayPal to cover subscriptions. Your yield covers your
-              subscriptions, so you don't have to pay.
+              subscriptions, so you don&apos;t have to pay.
             </p>
           </div>
         </CardHeader>
@@ -93,8 +325,9 @@ export function StakeInterface() {
                       key={amount}
                       variant="outline"
                       size="sm"
-                      onClick={() => handleQuickAmount(amount, "stake")}
+                      onClick={() => handleQuickStakeAmount(amount)}
                       className="px-3 sm:px-4 py-2 font-medium text-sm"
+                      disabled={isStaking}
                     >
                       ${amount}
                     </Button>
@@ -109,22 +342,21 @@ export function StakeInterface() {
                     <button
                       key={period.id}
                       onClick={() => period.active && setSelectedLockPeriod(period.id)}
-                      disabled={!period.active}
-                      className={`p-4 sm:p-6 rounded-xl border-2 transition-all duration-200 ${
-                        period.active
-                          ? selectedLockPeriod === period.id
-                            ? "border-primary bg-primary/5 shadow-sm"
-                            : "border-border hover:border-primary/50 hover:shadow-sm"
-                          : "border-border bg-muted/30 cursor-not-allowed opacity-50"
-                      }`}
+                      className={`border rounded-lg py-3 px-4 sm:py-4 sm:px-5 text-left transition-all duration-200 ${
+                        selectedLockPeriod === period.id && period.active
+                          ? "border-primary bg-primary/10"
+                          : "border-border bg-card/60 hover:border-primary/40"
+                      } ${period.active ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+                      disabled={!period.active || isStaking}
                     >
-                      <div className="text-center space-y-1 sm:space-y-2">
-                        <p className="font-semibold text-foreground text-sm sm:text-base">{period.label}</p>
-                        {period.active ? (
-                          <>
-                            <p className="text-base sm:text-lg font-bold text-accent">{period.apy}</p>
-                            <p className="text-xs text-muted-foreground">APY</p>
-                          </>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm sm:text-base text-foreground">
+                          {period.label}
+                        </span>
+                        {period.apy ? (
+                          <Badge variant="secondary" className="text-xs">
+                            APY {period.apy}
+                          </Badge>
                         ) : (
                           <Badge variant="secondary" className="text-xs">
                             Coming Soon
@@ -160,60 +392,107 @@ export function StakeInterface() {
 
               <Button
                 className="w-full h-12 sm:h-14 text-base sm:text-lg font-semibold"
-                disabled={!stakeAmount || Number.parseFloat(stakeAmount) <= 0}
+                disabled={!stakeAmount || isStaking || !walletConnected}
+                onClick={handleStake}
               >
-                Stake USDC
+                {isStaking ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Staking…
+                  </span>
+                ) : (
+                  "Stake USDC"
+                )}
               </Button>
             </TabsContent>
 
             <TabsContent value="unstake" className="space-y-6 sm:space-y-8 mt-6 sm:mt-8">
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-semibold text-foreground mb-3 block">Amount to Unstake (USDC)</label>
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      placeholder="0.00"
-                      value={unstakeAmount}
-                      onChange={(e) => setUnstakeAmount(e.target.value)}
-                      className="text-lg sm:text-xl h-12 sm:h-14 pl-4 pr-16 border-2 focus:border-primary"
-                    />
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-                      USDC
-                    </div>
-                  </div>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">Available to unstake: $0.00 USDC</p>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-foreground">Unlocked Tranches</label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void loadTranches()}
+                    disabled={isFetchingTranches || isUnstaking}
+                  >
+                    {isFetchingTranches ? (
+                      <span className="flex items-center gap-2 text-xs">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Refreshing
+                      </span>
+                    ) : (
+                      "Refresh"
+                    )}
+                  </Button>
                 </div>
 
-                <div className="flex flex-wrap gap-2 sm:gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setUnstakeAmount("0")}
-                    className="px-3 sm:px-4 py-2 font-medium text-sm"
-                  >
-                    Max
-                  </Button>
-                  {quickAmounts.map((amount) => (
-                    <Button
-                      key={amount}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleQuickAmount(amount, "unstake")}
-                      className="px-3 sm:px-4 py-2 font-medium text-sm"
-                    >
-                      ${amount}
-                    </Button>
-                  ))}
-                </div>
+                {isFetchingTranches ? (
+                  <div className="flex items-center justify-center py-10 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                ) : availableTranches.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No unlocked tranches available yet. Stakes become available after the selected lock period.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {availableTranches.map((entry) => {
+                      const principal = formatUsdcFromSmallest(entry.principal)
+                      const unlockDate = new Date(entry.lockEndTs * 1000)
+                      return (
+                        <button
+                          key={entry.trancheId}
+                          onClick={() => setSelectedTrancheId(entry.trancheId)}
+                          className={`w-full border rounded-lg px-4 py-3 text-left transition-all duration-200 ${
+                            selectedTrancheId === entry.trancheId
+                              ? "border-primary bg-primary/10"
+                              : "border-border bg-card/60 hover:border-primary/40"
+                          }`}
+                          disabled={isUnstaking}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold text-sm text-foreground">
+                                Tranche #{entry.trancheId}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Principal: {principal} USDC
+                              </p>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Unlocked on {unlockDate.toLocaleDateString()}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })
+                  </div>
+                )}
+
+                {selectedTranche && (
+                  <Card className="bg-muted/30 border-0">
+                    <CardContent className="p-4">
+                      <p className="text-sm text-muted-foreground">
+                        You are unstaking tranche #{selectedTranche.trancheId} with
+                        <span className="font-semibold text-foreground"> {formatUsdcFromSmallest(selectedTranche.principal)} USDC</span> principal.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
 
               <Button
                 variant="destructive"
                 className="w-full h-12 sm:h-14 text-base sm:text-lg font-semibold"
-                disabled={!unstakeAmount || Number.parseFloat(unstakeAmount) <= 0}
+                onClick={handleUnstake}
+                disabled={!selectedTranche || isUnstaking || isFetchingTranches || !walletConnected}
               >
-                Unstake USDC
+                {isUnstaking ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Unstaking…
+                  </span>
+                ) : (
+                  "Unstake"
+                )}
               </Button>
             </TabsContent>
           </Tabs>
