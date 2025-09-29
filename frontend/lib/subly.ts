@@ -14,7 +14,7 @@ import {
   type BlockhashWithExpiryBlockHeight,
 } from "@solana/web3.js"
 
-import rawIdl from "./idl/subly_solana_program.json" assert { type: "json" }
+import rawIdl from "./idl/subly_solana_program.json"
 
 const DEFAULT_PROGRAM_ID = (rawIdl as any).address as string
 
@@ -39,6 +39,7 @@ const PROGRAM_ID = resolveProgramId()
 
 const CONFIG_SEED = Buffer.from("config")
 const USER_POSITION_SEED = Buffer.from("user_position")
+const USER_SUBSCRIPTIONS_SEED = Buffer.from("user_subscriptions")
 const DEFAULT_LOCK_OPTION = 3
 const USDC_DECIMALS = 6
 
@@ -82,6 +83,60 @@ export async function fetchSublyConfig(connection: Connection): Promise<SublyCon
     paused: decoded.paused,
     bump: decoded.bump,
     vaultBump: decoded.vault_bump,
+  }
+}
+
+export type PayPalRecipientDetails = {
+  configured: boolean
+  recipientType: "EMAIL" | "PAYPAL_ID" | "PHONE" | "USER_HANDLE" | null
+  receiver: string
+}
+
+function mapRecipientType(raw: any): PayPalRecipientDetails["recipientType"] {
+  if (!raw || typeof raw !== "object") {
+    return null
+  }
+
+  const [variant] = Object.keys(raw)
+  if (!variant) {
+    return null
+  }
+
+  switch (variant.toLowerCase()) {
+    case "email":
+      return "EMAIL"
+    case "paypalid":
+      return "PAYPAL_ID"
+    case "phone":
+      return "PHONE"
+    case "userhandle":
+      return "USER_HANDLE"
+    default:
+      return null
+  }
+}
+
+export async function fetchPayPalRecipient(
+  connection: Connection,
+  user: PublicKey,
+): Promise<PayPalRecipientDetails | null> {
+  const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
+    [USER_SUBSCRIPTIONS_SEED, user.toBuffer()],
+    PROGRAM_ID,
+  )
+
+  const accountInfo = await connection.getAccountInfo(userSubscriptionsPda)
+  if (!accountInfo) {
+    return null
+  }
+
+  const coder = getCoder()
+  const decoded = coder.decode("UserSubscriptions", accountInfo.data) as any
+
+  return {
+    configured: Boolean(decoded.paypal_configured),
+    recipientType: mapRecipientType(decoded.paypal_recipient_type),
+    receiver: decoded.paypal_receiver as string,
   }
 }
 
@@ -209,6 +264,68 @@ export async function prepareUnstakeTransaction(
   )
 
   const transaction = new Transaction().add(...instructions)
+  transaction.feePayer = user
+
+  const blockhash = await connection.getLatestBlockhash()
+  transaction.recentBlockhash = blockhash.blockhash
+
+  return { transaction, blockhash }
+}
+
+export type RegisterPayPalArgs = {
+  recipientType: "EMAIL" | "PAYPAL_ID" | "PHONE" | "USER_HANDLE"
+  receiver: string
+}
+
+function normaliseRecipientTypeInput(type: RegisterPayPalArgs["recipientType"]): string {
+  switch (type) {
+    case "EMAIL":
+      return "EMAIL"
+    case "PAYPAL_ID":
+      return "PAYPAL_ID"
+    case "PHONE":
+      return "PHONE"
+    case "USER_HANDLE":
+      return "USER_HANDLE"
+    default:
+      return "EMAIL"
+  }
+}
+
+export async function prepareRegisterPayPalRecipientTransaction(
+  connection: Connection,
+  user: PublicKey,
+  args: RegisterPayPalArgs,
+): Promise<{ transaction: Transaction; blockhash: BlockhashWithExpiryBlockHeight }> {
+  const receiver = args.receiver.trim()
+  if (!receiver) {
+    throw new Error("PayPal receiver information is required")
+  }
+
+  const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
+    [USER_SUBSCRIPTIONS_SEED, user.toBuffer()],
+    PROGRAM_ID,
+  )
+
+  const instructionCoder = new BorshInstructionCoder(SUBLY_IDL)
+  const encoded = instructionCoder.encode("register_paypal_recipient", {
+    args: {
+      recipient_type: normaliseRecipientTypeInput(args.recipientType),
+      receiver,
+    },
+  })
+
+  const instruction = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: user, isSigner: true, isWritable: true },
+      { pubkey: userSubscriptionsPda, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: encoded,
+  })
+
+  const transaction = new Transaction().add(instruction)
   transaction.feePayer = user
 
   const blockhash = await connection.getLatestBlockhash()
