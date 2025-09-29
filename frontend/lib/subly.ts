@@ -14,100 +14,28 @@ import {
   type BlockhashWithExpiryBlockHeight,
 } from "@solana/web3.js"
 
-const PROGRAM_ID = new PublicKey("GJvB3qPb5UmRoWADHWxgwfepEbTbCMwryzWKaBq3Ys22")
+import rawIdl from "./idl/subly_solana_program.json" assert { type: "json" }
 
-const SUBLY_IDL: Idl = {
-  version: "0.1.0",
-  name: "sublySolanaProgram",
-  instructions: [
-    {
-      name: "stake",
-      accounts: [
-        { name: "config", isMut: true, isSigner: false },
-        { name: "user", isMut: true, isSigner: true },
-        { name: "userPosition", isMut: true, isSigner: false },
-        { name: "userTokenAccount", isMut: true, isSigner: false },
-        { name: "vault", isMut: true, isSigner: false },
-        { name: "tokenProgram", isMut: false, isSigner: false },
-        { name: "systemProgram", isMut: false, isSigner: false },
-      ],
-      args: [
-        { name: "amount", type: "u64" },
-        { name: "lockOption", type: "u8" },
-      ],
-    },
-    {
-      name: "unstake",
-      accounts: [
-        { name: "config", isMut: true, isSigner: false },
-        { name: "user", isMut: true, isSigner: true },
-        { name: "userPosition", isMut: true, isSigner: false },
-        { name: "vault", isMut: true, isSigner: false },
-        { name: "userTokenAccount", isMut: true, isSigner: false },
-        { name: "tokenProgram", isMut: false, isSigner: false },
-      ],
-      args: [{ name: "trancheId", type: "u64" }],
-    },
-  ],
-  accounts: [
-    {
-      name: "sublyConfig",
-      type: {
-        kind: "struct",
-        fields: [
-          { name: "authority", type: "pubkey" },
-          { name: "usdcMint", type: "pubkey" },
-          { name: "vault", type: "pubkey" },
-          { name: "totalPrincipal", type: "u64" },
-          { name: "rewardPool", type: "u64" },
-          { name: "accIndex", type: "u128" },
-          { name: "apyBps", type: "u16" },
-          { name: "lastUpdateTs", type: "i64" },
-          { name: "paused", type: "bool" },
-          { name: "bump", type: "u8" },
-          { name: "vaultBump", type: "u8" },
-        ],
-      },
-    },
-    {
-      name: "userStake",
-      type: {
-        kind: "struct",
-        fields: [
-          { name: "owner", type: "pubkey" },
-          { name: "totalPrincipal", type: "u64" },
-          { name: "lastUpdatedTs", type: "i64" },
-          { name: "nextTrancheId", type: "u64" },
-          {
-            name: "entries",
-            type: { vec: { defined: { name: "stakeEntry" } } },
-          },
-          { name: "bump", type: "u8" },
-        ],
-      },
-    },
-  ],
-  types: [
-    {
-      name: "stakeEntry",
-      type: {
-        kind: "struct",
-        fields: [
-          { name: "trancheId", type: "u64" },
-          { name: "principal", type: "u64" },
-          { name: "depositedAt", type: "i64" },
-          { name: "lockEndTs", type: "i64" },
-          { name: "lockDuration", type: "i64" },
-          { name: "startAccIndex", type: "u128" },
-          { name: "lastAccIndex", type: "u128" },
-          { name: "claimedOperator", type: "u64" },
-          { name: "claimedUser", type: "u64" },
-          { name: "unrealizedYield", type: "u64" },
-        ],
-      },
-    },
-  ],
+const DEFAULT_PROGRAM_ID = (rawIdl as any).address as string
+
+function resolveProgramId(): PublicKey {
+  const fromEnv = process.env.NEXT_PUBLIC_SUBLY_PROGRAM_ID?.trim()
+  if (!fromEnv) {
+    return new PublicKey(DEFAULT_PROGRAM_ID)
+  }
+
+  try {
+    return new PublicKey(fromEnv)
+  } catch (error) {
+    throw new Error(
+      `Invalid NEXT_PUBLIC_SUBLY_PROGRAM_ID: ${(error as Error).message ?? "unknown error"}`,
+    )
+  }
 }
+
+const SUBLY_IDL = rawIdl as Idl
+
+const PROGRAM_ID = resolveProgramId()
 
 const CONFIG_SEED = Buffer.from("config")
 const USER_POSITION_SEED = Buffer.from("user_position")
@@ -140,20 +68,20 @@ export async function fetchSublyConfig(connection: Connection): Promise<SublyCon
   }
 
   const coder = getCoder()
-  const decoded = coder.decode("sublyConfig", accountInfo.data) as any
+  const decoded = coder.decode("SublyConfig", accountInfo.data) as any
 
   return {
     authority: decoded.authority as PublicKey,
-    usdcMint: decoded.usdcMint as PublicKey,
+    usdcMint: decoded.usdc_mint as PublicKey,
     vault: decoded.vault as PublicKey,
-    totalPrincipal: BigInt(decoded.totalPrincipal.toString()),
-    rewardPool: BigInt(decoded.rewardPool.toString()),
-    accIndex: BigInt(decoded.accIndex.toString()),
-    apyBps: decoded.apyBps,
-    lastUpdateTs: BigInt(decoded.lastUpdateTs.toString()),
+    totalPrincipal: BigInt(decoded.total_principal.toString()),
+    rewardPool: BigInt(decoded.reward_pool.toString()),
+    accIndex: BigInt(decoded.acc_index.toString()),
+    apyBps: decoded.apy_bps,
+    lastUpdateTs: BigInt(decoded.last_update_ts.toString()),
     paused: decoded.paused,
     bump: decoded.bump,
-    vaultBump: decoded.vaultBump,
+    vaultBump: decoded.vault_bump,
   }
 }
 
@@ -198,7 +126,7 @@ export async function prepareStakeTransaction(
   const instructionCoder = new BorshInstructionCoder(SUBLY_IDL)
   const encoded = instructionCoder.encode("stake", {
     amount: new BN(amount.toString()),
-    lockOption: DEFAULT_LOCK_OPTION,
+    lock_option: DEFAULT_LOCK_OPTION,
   })
 
   const stakeIx = new TransactionInstruction({
@@ -262,7 +190,7 @@ export async function prepareUnstakeTransaction(
 
   const instructionCoder = new BorshInstructionCoder(SUBLY_IDL)
   const encoded = instructionCoder.encode("unstake", {
-    trancheId: new BN(trancheId),
+    tranche_id: new BN(trancheId),
   })
 
   instructions.push(
@@ -328,15 +256,15 @@ export async function fetchUserStakeEntries(
   }
 
   const coder = getCoder()
-  const decoded = coder.decode("userStake", accountInfo.data) as any
+  const decoded = coder.decode("UserStake", accountInfo.data) as any
   const entries = (decoded.entries ?? []) as any[]
 
   return entries.map((entry) => ({
-    trancheId: Number(entry.trancheId),
+    trancheId: Number(entry.tranche_id),
     principal: BigInt(entry.principal.toString()),
-    depositedAt: Number(entry.depositedAt),
-    lockEndTs: Number(entry.lockEndTs),
-    lockDuration: Number(entry.lockDuration),
+    depositedAt: Number(entry.deposited_at),
+    lockEndTs: Number(entry.lock_end_ts),
+    lockDuration: Number(entry.lock_duration),
   }))
 }
 export type StakeEntrySummary = {

@@ -1,0 +1,2948 @@
+{
+  "address": "GJvB3qPb5UmRoWADHWxgwfepEbTbCMwryzWKaBq3Ys22",
+  "metadata": {
+    "name": "subly_solana_program",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "claim_operator",
+      "discriminator": [
+        154,
+        253,
+        60,
+        81,
+        100,
+        129,
+        228,
+        196
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "user_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user_position.owner",
+                "account": "UserStake"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claim_user",
+      "discriminator": [
+        164,
+        64,
+        55,
+        199,
+        90,
+        78,
+        147,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "find_due_subscriptions",
+      "discriminator": [
+        60,
+        21,
+        161,
+        25,
+        183,
+        161,
+        60,
+        30
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "subscription_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "FindDueSubscriptionsArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "fund_rewards",
+      "discriminator": [
+        114,
+        64,
+        163,
+        112,
+        175,
+        167,
+        19,
+        121
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "funder",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "funder_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "get_paypal_recipient",
+      "discriminator": [
+        252,
+        55,
+        218,
+        177,
+        208,
+        214,
+        131,
+        240
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_subscriptions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "get_subscription_services",
+      "discriminator": [
+        26,
+        52,
+        229,
+        135,
+        174,
+        119,
+        98,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "subscription_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "get_user_available_services",
+      "discriminator": [
+        245,
+        69,
+        90,
+        39,
+        200,
+        97,
+        17,
+        49
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_subscriptions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "subscription_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "get_user_stake",
+      "discriminator": [
+        138,
+        109,
+        43,
+        83,
+        187,
+        0,
+        156,
+        133
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "get_user_subscriptions",
+      "discriminator": [
+        70,
+        242,
+        39,
+        146,
+        213,
+        249,
+        69,
+        204
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_subscriptions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "subscription_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "subscription_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "InitializeArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "record_subscription_payment",
+      "discriminator": [
+        178,
+        63,
+        80,
+        74,
+        208,
+        128,
+        61,
+        68
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "signer": true
+        },
+        {
+          "name": "user"
+        },
+        {
+          "name": "user_subscriptions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "RecordSubscriptionPaymentArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "register_paypal_recipient",
+      "discriminator": [
+        193,
+        116,
+        216,
+        238,
+        216,
+        233,
+        20,
+        38
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_subscriptions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "RegisterPayPalRecipientArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "register_subscription_service",
+      "discriminator": [
+        152,
+        115,
+        189,
+        90,
+        214,
+        79,
+        127,
+        252
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "subscription_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "RegisterSubscriptionServiceArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stake",
+      "discriminator": [
+        206,
+        176,
+        202,
+        18,
+        200,
+        209,
+        179,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "lock_option",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "subscribe_service",
+      "discriminator": [
+        156,
+        161,
+        57,
+        153,
+        66,
+        237,
+        13,
+        156
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_subscriptions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "subscription_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "SubscribeServiceArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "sync_yield",
+      "discriminator": [
+        11,
+        246,
+        63,
+        58,
+        106,
+        225,
+        26,
+        139
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "signer": true
+        },
+        {
+          "name": "user_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "unstake",
+      "discriminator": [
+        90,
+        95,
+        107,
+        42,
+        205,
+        124,
+        50,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "tranche_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "unsubscribe_service",
+      "discriminator": [
+        12,
+        72,
+        251,
+        131,
+        97,
+        25,
+        191,
+        3
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_subscriptions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  115,
+                  117,
+                  98,
+                  115,
+                  99,
+                  114,
+                  105,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "UnsubscribeServiceArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "SublyConfig",
+      "discriminator": [
+        23,
+        177,
+        64,
+        241,
+        170,
+        121,
+        0,
+        15
+      ]
+    },
+    {
+      "name": "SubscriptionRegistry",
+      "discriminator": [
+        246,
+        156,
+        220,
+        190,
+        145,
+        145,
+        196,
+        129
+      ]
+    },
+    {
+      "name": "UserStake",
+      "discriminator": [
+        102,
+        53,
+        163,
+        107,
+        9,
+        138,
+        87,
+        153
+      ]
+    },
+    {
+      "name": "UserSubscriptions",
+      "discriminator": [
+        28,
+        64,
+        101,
+        41,
+        241,
+        150,
+        8,
+        81
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "PayPalRecipientFetched",
+      "discriminator": [
+        217,
+        231,
+        230,
+        70,
+        234,
+        100,
+        213,
+        130
+      ]
+    },
+    {
+      "name": "PayPalRecipientRegistered",
+      "discriminator": [
+        176,
+        197,
+        85,
+        119,
+        19,
+        37,
+        144,
+        154
+      ]
+    },
+    {
+      "name": "SubscriptionActivated",
+      "discriminator": [
+        66,
+        23,
+        25,
+        128,
+        66,
+        95,
+        220,
+        100
+      ]
+    },
+    {
+      "name": "SubscriptionCancellationRequested",
+      "discriminator": [
+        248,
+        151,
+        236,
+        84,
+        185,
+        63,
+        186,
+        108
+      ]
+    },
+    {
+      "name": "SubscriptionPaymentRecorded",
+      "discriminator": [
+        39,
+        250,
+        114,
+        168,
+        124,
+        50,
+        172,
+        245
+      ]
+    },
+    {
+      "name": "SubscriptionServiceRegistered",
+      "discriminator": [
+        173,
+        193,
+        93,
+        216,
+        97,
+        216,
+        111,
+        241
+      ]
+    },
+    {
+      "name": "SubscriptionServicesFetched",
+      "discriminator": [
+        240,
+        231,
+        114,
+        50,
+        70,
+        94,
+        18,
+        58
+      ]
+    },
+    {
+      "name": "SubscriptionsDue",
+      "discriminator": [
+        119,
+        64,
+        93,
+        96,
+        221,
+        103,
+        47,
+        18
+      ]
+    },
+    {
+      "name": "UserAvailableServicesFetched",
+      "discriminator": [
+        96,
+        38,
+        31,
+        232,
+        122,
+        190,
+        194,
+        199
+      ]
+    },
+    {
+      "name": "UserStakeFetched",
+      "discriminator": [
+        214,
+        133,
+        63,
+        153,
+        57,
+        31,
+        218,
+        82
+      ]
+    },
+    {
+      "name": "UserSubscriptionsFetched",
+      "discriminator": [
+        138,
+        104,
+        60,
+        221,
+        171,
+        46,
+        163,
+        75
+      ]
+    },
+    {
+      "name": "YieldSnapshot",
+      "discriminator": [
+        222,
+        220,
+        54,
+        224,
+        47,
+        39,
+        73,
+        180
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AmountTooSmall",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidLockOption",
+      "msg": "Invalid lock option supplied"
+    },
+    {
+      "code": 6002,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidTokenOwner",
+      "msg": "Invalid token owner for provided account"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidMint",
+      "msg": "Invalid token mint for provided account"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidPositionOwner",
+      "msg": "Invalid position owner"
+    },
+    {
+      "code": 6006,
+      "name": "ProgramPaused",
+      "msg": "Program is paused"
+    },
+    {
+      "code": 6007,
+      "name": "InsufficientRewardPool",
+      "msg": "Insufficient rewards available in the pool"
+    },
+    {
+      "code": 6008,
+      "name": "StakeLocked",
+      "msg": "Stake position is still locked"
+    },
+    {
+      "code": 6009,
+      "name": "OutstandingYield",
+      "msg": "Stake position still has unclaimed yield"
+    },
+    {
+      "code": 6010,
+      "name": "NothingToUnstake",
+      "msg": "Nothing available to unstake"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidTranche",
+      "msg": "Requested tranche could not be found"
+    },
+    {
+      "code": 6012,
+      "name": "NothingToClaim",
+      "msg": "Nothing available to claim"
+    },
+    {
+      "code": 6013,
+      "name": "UnauthorizedAuthority",
+      "msg": "Only the configured authority may perform this action"
+    },
+    {
+      "code": 6014,
+      "name": "StringTooLong",
+      "msg": "Provided string exceeds the allowed length"
+    },
+    {
+      "code": 6015,
+      "name": "SubscriptionNotFound",
+      "msg": "Requested subscription record could not be found"
+    },
+    {
+      "code": 6016,
+      "name": "SubscriptionServiceNotFound",
+      "msg": "Requested service could not be found"
+    },
+    {
+      "code": 6017,
+      "name": "SubscriptionNotActive",
+      "msg": "Subscription is not currently active"
+    },
+    {
+      "code": 6018,
+      "name": "SubscriptionAlreadyExists",
+      "msg": "Subscription already exists for the selected service"
+    },
+    {
+      "code": 6019,
+      "name": "SubscriptionBudgetExceeded",
+      "msg": "Subscription commitments would exceed the available budget"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidSubscriptionAccount",
+      "msg": "Invalid subscription account for the provided user"
+    },
+    {
+      "code": 6021,
+      "name": "InvalidPayPalRecipientType",
+      "msg": "Invalid PayPal recipient type"
+    },
+    {
+      "code": 6022,
+      "name": "PayPalInfoMissing",
+      "msg": "PayPal recipient information is not configured"
+    },
+    {
+      "code": 6023,
+      "name": "SubscriptionNotPayable",
+      "msg": "Subscription is not payable in its current state"
+    }
+  ],
+  "types": [
+    {
+      "name": "DueSubscriptionInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscription_id",
+            "type": "u64"
+          },
+          {
+            "name": "service_id",
+            "type": "u64"
+          },
+          {
+            "name": "service_name",
+            "type": "string"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "recipient_type",
+            "type": "string"
+          },
+          {
+            "name": "receiver",
+            "type": "string"
+          },
+          {
+            "name": "due_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FindDueSubscriptionsArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "look_ahead_seconds",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PayPalRecipientFetched",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "configured",
+            "type": "bool"
+          },
+          {
+            "name": "recipient_type",
+            "type": "string"
+          },
+          {
+            "name": "receiver",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PayPalRecipientRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient_type",
+            "type": "string"
+          },
+          {
+            "name": "receiver",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PayPalRecipientType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Email"
+          },
+          {
+            "name": "PayPalId"
+          },
+          {
+            "name": "Phone"
+          },
+          {
+            "name": "UserHandle"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RecordSubscriptionPaymentArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscription_id",
+            "type": "u64"
+          },
+          {
+            "name": "payment_ts",
+            "type": {
+              "option": "i64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RegisterPayPalRecipientArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "recipient_type",
+            "type": "string"
+          },
+          {
+            "name": "receiver",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RegisterSubscriptionServiceArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "details",
+            "type": "string"
+          },
+          {
+            "name": "logo_url",
+            "type": "string"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StakeEntry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tranche_id",
+            "type": "u64"
+          },
+          {
+            "name": "principal",
+            "type": "u64"
+          },
+          {
+            "name": "deposited_at",
+            "type": "i64"
+          },
+          {
+            "name": "lock_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "lock_duration",
+            "type": "i64"
+          },
+          {
+            "name": "start_acc_index",
+            "type": "u128"
+          },
+          {
+            "name": "last_acc_index",
+            "type": "u128"
+          },
+          {
+            "name": "claimed_operator",
+            "type": "u64"
+          },
+          {
+            "name": "claimed_user",
+            "type": "u64"
+          },
+          {
+            "name": "unrealized_yield",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StakeEntrySnapshot",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tranche_id",
+            "type": "u64"
+          },
+          {
+            "name": "principal",
+            "type": "u64"
+          },
+          {
+            "name": "deposited_at",
+            "type": "i64"
+          },
+          {
+            "name": "lock_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "lock_duration",
+            "type": "i64"
+          },
+          {
+            "name": "claimed_operator",
+            "type": "u64"
+          },
+          {
+            "name": "claimed_user",
+            "type": "u64"
+          },
+          {
+            "name": "unrealized_yield",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SublyConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_principal",
+            "type": "u64"
+          },
+          {
+            "name": "reward_pool",
+            "type": "u64"
+          },
+          {
+            "name": "acc_index",
+            "type": "u128"
+          },
+          {
+            "name": "apy_bps",
+            "type": "u16"
+          },
+          {
+            "name": "last_update_ts",
+            "type": "i64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "vault_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscribeServiceArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "service_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionActivated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscription_id",
+            "type": "u64"
+          },
+          {
+            "name": "service_id",
+            "type": "u64"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "recipient_type",
+            "type": "string"
+          },
+          {
+            "name": "receiver",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionCancellationRequested",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscription_id",
+            "type": "u64"
+          },
+          {
+            "name": "service_id",
+            "type": "u64"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "pending_until_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionPaymentRecorded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscription_id",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "paid_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionRegistry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "next_service_id",
+            "type": "u64"
+          },
+          {
+            "name": "services",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "SubscriptionService"
+                }
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionService",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "details",
+            "type": "string"
+          },
+          {
+            "name": "logo_url",
+            "type": "string"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionServiceInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "details",
+            "type": "string"
+          },
+          {
+            "name": "logo_url",
+            "type": "string"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionServiceRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "details",
+            "type": "string"
+          },
+          {
+            "name": "logo_url",
+            "type": "string"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionServicesFetched",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "services",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "SubscriptionServiceInfo"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Active"
+          },
+          {
+            "name": "PendingCancellation"
+          },
+          {
+            "name": "Cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscriptionsDue",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "entries",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "DueSubscriptionInfo"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "UnsubscribeServiceArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscription_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserAvailableServicesFetched",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "available_budget_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "services",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "SubscriptionServiceInfo"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserStake",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_principal",
+            "type": "u64"
+          },
+          {
+            "name": "last_updated_ts",
+            "type": "i64"
+          },
+          {
+            "name": "next_tranche_id",
+            "type": "u64"
+          },
+          {
+            "name": "entries",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "StakeEntry"
+                }
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserStakeFetched",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_principal",
+            "type": "u64"
+          },
+          {
+            "name": "stake_entries",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "StakeEntrySnapshot"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserSubscription",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "service_id",
+            "type": "u64"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "started_at",
+            "type": "i64"
+          },
+          {
+            "name": "last_payment_ts",
+            "type": "i64"
+          },
+          {
+            "name": "next_billing_ts",
+            "type": "i64"
+          },
+          {
+            "name": "pending_until_ts",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "SubscriptionStatus"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserSubscriptionInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "subscription_id",
+            "type": "u64"
+          },
+          {
+            "name": "service_id",
+            "type": "u64"
+          },
+          {
+            "name": "service_name",
+            "type": "string"
+          },
+          {
+            "name": "service_details",
+            "type": "string"
+          },
+          {
+            "name": "service_logo_url",
+            "type": "string"
+          },
+          {
+            "name": "service_provider",
+            "type": "string"
+          },
+          {
+            "name": "monthly_price_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "started_at",
+            "type": "i64"
+          },
+          {
+            "name": "last_payment_ts",
+            "type": "i64"
+          },
+          {
+            "name": "next_billing_ts",
+            "type": "i64"
+          },
+          {
+            "name": "pending_until_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserSubscriptions",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "next_subscription_id",
+            "type": "u64"
+          },
+          {
+            "name": "total_active_commitment",
+            "type": "u64"
+          },
+          {
+            "name": "total_pending_commitment",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "subscriptions",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "UserSubscription"
+                }
+              }
+            }
+          },
+          {
+            "name": "paypal_configured",
+            "type": "bool"
+          },
+          {
+            "name": "paypal_recipient_type",
+            "type": {
+              "defined": {
+                "name": "PayPalRecipientType"
+              }
+            }
+          },
+          {
+            "name": "paypal_receiver",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserSubscriptionsFetched",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "subscriptions",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "UserSubscriptionInfo"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "YieldSnapshot",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_principal",
+            "type": "u64"
+          },
+          {
+            "name": "total_unrealized_yield",
+            "type": "u64"
+          },
+          {
+            "name": "total_generated_yield",
+            "type": "u64"
+          },
+          {
+            "name": "operator_claimed",
+            "type": "u64"
+          },
+          {
+            "name": "user_claimed",
+            "type": "u64"
+          },
+          {
+            "name": "tranche_count",
+            "type": "u32"
+          },
+          {
+            "name": "last_updated_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "BASIS_POINTS_DIVISOR",
+      "type": "u64",
+      "value": "10000"
+    },
+    {
+      "name": "BILLING_PERIOD_SECONDS",
+      "type": "i64",
+      "value": "2592000"
+    },
+    {
+      "name": "CONFIG_SEED",
+      "type": "string",
+      "value": "\"config\""
+    },
+    {
+      "name": "DEFAULT_APY_BPS",
+      "type": "u16",
+      "value": "1000"
+    },
+    {
+      "name": "DEFAULT_LOCK_INDEX",
+      "type": "u8",
+      "value": "3"
+    },
+    {
+      "name": "INDEX_SCALE",
+      "type": "u128",
+      "value": "1000000000000"
+    },
+    {
+      "name": "LOCK_OPTIONS",
+      "type": {
+        "array": [
+          "i64",
+          4
+        ]
+      },
+      "value": "[2592000, 7776000, 15552000, 31536000]"
+    },
+    {
+      "name": "SECONDS_PER_DAY",
+      "type": "i64",
+      "value": "86400"
+    },
+    {
+      "name": "SECONDS_PER_YEAR",
+      "type": "u64",
+      "value": "31536000"
+    },
+    {
+      "name": "SUBSCRIPTION_REGISTRY_SEED",
+      "type": "string",
+      "value": "\"subscription_registry\""
+    },
+    {
+      "name": "USER_POSITION_SEED",
+      "type": "string",
+      "value": "\"user_position\""
+    },
+    {
+      "name": "USER_SUBSCRIPTIONS_SEED",
+      "type": "string",
+      "value": "\"user_subscriptions\""
+    },
+    {
+      "name": "VAULT_SEED",
+      "type": "string",
+      "value": "\"vault\""
+    }
+  ]
+}
