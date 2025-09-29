@@ -3,7 +3,8 @@
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
-    "initialize-devnet": "ts-node --project tsconfig.json scripts/initialize-devnet.ts"
+    "initialize-devnet": "ts-node --project tsconfig.json scripts/initialize-devnet.ts",
+    "register-subscription-services": "ts-node --project tsconfig.json scripts/register-subscription-services.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

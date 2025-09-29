@@ -32,6 +32,13 @@ Deploy success
 - Privy でウォレット接続後、`Stake` タブから金額を入力して実行すると `prepareStakeTransaction` が新しい Program ID 宛てにトランザクションを生成します。USDC ATA が無い場合は自動で作成されます。
 - Devnet 上で USDC 残高が不足しているとトランザクションが失敗するため、事前にトークンを用意してください。
 
+## Subscription サービスを登録する
+
+- `scripts/subscription-services.json` に登録したいサービス情報を追記できます（`monthlyPriceUsd` は USD 金額）。
+- `anchor run register-services` を実行すると JSON に含まれる全サービスが `register_subscription_service` 経由で順番に登録されます。
+- 別のファイルを使いたい場合は `yarn register-subscription-services path/to/file.json` を直接実行してください。
+- 登録済みのサービスはフロントエンドの「Subscribe」タブで全ユーザーが閲覧できるようになっています。
+
 # Initialize
 
 ```

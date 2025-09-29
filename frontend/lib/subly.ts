@@ -40,6 +40,7 @@ const PROGRAM_ID = resolveProgramId()
 const CONFIG_SEED = Buffer.from("config")
 const USER_POSITION_SEED = Buffer.from("user_position")
 const USER_SUBSCRIPTIONS_SEED = Buffer.from("user_subscriptions")
+const SUBSCRIPTION_REGISTRY_SEED = Buffer.from("subscription_registry")
 const DEFAULT_LOCK_OPTION = 3
 const USDC_DECIMALS = 6
 
@@ -138,6 +139,46 @@ export async function fetchPayPalRecipient(
     recipientType: mapRecipientType(decoded.paypal_recipient_type),
     receiver: decoded.paypal_receiver as string,
   }
+}
+
+export type SubscriptionServiceEntry = {
+  id: number
+  creator: PublicKey
+  name: string
+  monthlyPrice: bigint
+  details: string
+  logoUrl: string
+  provider: string
+  createdAt: number
+}
+
+export async function fetchSubscriptionServices(
+  connection: Connection,
+): Promise<SubscriptionServiceEntry[]> {
+  const [subscriptionRegistryPda] = PublicKey.findProgramAddressSync(
+    [SUBSCRIPTION_REGISTRY_SEED],
+    PROGRAM_ID,
+  )
+
+  const accountInfo = await connection.getAccountInfo(subscriptionRegistryPda)
+  if (!accountInfo) {
+    return []
+  }
+
+  const coder = getCoder()
+  const decoded = coder.decode("SubscriptionRegistry", accountInfo.data) as any
+  const services = (decoded.services ?? []) as any[]
+
+  return services.map((service) => ({
+    id: Number(service.id),
+    creator: new PublicKey(service.creator),
+    name: String(service.name),
+    monthlyPrice: BigInt(service.monthly_price_usdc.toString()),
+    details: String(service.details),
+    logoUrl: String(service.logo_url),
+    provider: String(service.provider),
+    createdAt: Number(service.created_at),
+  }))
 }
 
 export async function prepareStakeTransaction(

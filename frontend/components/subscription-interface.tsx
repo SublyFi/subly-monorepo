@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { usePrivy } from "@privy-io/react-auth"
 import { useWallets } from "@privy-io/react-auth/solana"
@@ -11,22 +9,24 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Music, Youtube, Sparkles, CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { Sparkles, CheckCircle, XCircle, Loader2 } from "lucide-react"
 import { PayPalSetupModal } from "./paypal-setup-modal"
 import {
   fetchPayPalRecipient,
   fetchSublyConfig,
   fetchUserStakeEntries,
+  fetchSubscriptionServices,
   formatUsdcFromSmallest,
   type PayPalRecipientDetails,
 } from "@/lib/subly"
 
 interface SubscriptionService {
-  id: string
+  id: number
   name: string
   price: number
   description: string
-  logo: React.ReactNode
+  logoUrl: string
+  provider: string
   isSubscribed?: boolean
 }
 
@@ -37,8 +37,10 @@ export function SubscriptionInterface() {
   const [availableYield, setAvailableYield] = useState(0)
   const [totalStaked, setTotalStaked] = useState(0)
   const [isYieldLoading, setIsYieldLoading] = useState(false)
+  const [servicesLoading, setServicesLoading] = useState(false)
   const [showPayPalModal, setShowPayPalModal] = useState(false)
   const [hasPayPal, setHasPayPal] = useState(false)
+  const [availableServices, setAvailableServices] = useState<SubscriptionService[]>([])
 
   const { ready, authenticated } = usePrivy()
   const { wallets, ready: walletsReady } = useWallets()
@@ -59,6 +61,7 @@ export function SubscriptionInterface() {
   const loadYieldData = useCallback(async () => {
     if (!walletConnected || !activeWallet?.address) {
       setAvailableYield(0)
+      setTotalStaked(0)
       updatePayPalState(null)
       return
     }
@@ -106,47 +109,37 @@ export function SubscriptionInterface() {
     void loadYieldData()
   }, [loadYieldData])
 
-  const availableServices: SubscriptionService[] = [
-    {
-      id: "netflix",
-      name: "Netflix",
-      price: 15.49,
-      description: "Stream movies and TV shows",
-      logo: <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center text-white font-bold">N</div>,
-    },
-    {
-      id: "spotify",
-      name: "Spotify",
-      price: 9.99,
-      description: "Music streaming service",
-      logo: <Music className="w-8 h-8 text-green-500" />,
-    },
-    {
-      id: "youtube",
-      name: "YouTube Premium",
-      price: 11.99,
-      description: "Ad-free YouTube experience",
-      logo: <Youtube className="w-8 h-8 text-red-500" />,
-    },
-    {
-      id: "disney",
-      name: "Disney+",
-      price: 7.99,
-      description: "Disney movies and shows",
-      logo: <Sparkles className="w-8 h-8 text-blue-600" />,
-    },
-  ]
+  const loadServices = useCallback(async () => {
+    try {
+      setServicesLoading(true)
+      const services = await fetchSubscriptionServices(connection)
 
-  const subscribedServices: SubscriptionService[] = [
-    {
-      id: "netflix",
-      name: "Netflix",
-      price: 15.49,
-      description: "Stream movies and TV shows",
-      logo: <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center text-white font-bold">N</div>,
-      isSubscribed: true,
-    },
-  ]
+      const mapped = services.map((service) => ({
+        id: service.id,
+        name: service.name,
+        price: Number(formatUsdcFromSmallest(service.monthlyPrice)),
+        description: service.details,
+        logoUrl: service.logoUrl,
+        provider: service.provider,
+      }))
+
+      setAvailableServices(mapped)
+    } catch (error) {
+      console.error("Failed to load subscription services", error)
+      toast.error(
+        error instanceof Error ? error.message : "Unable to load subscription services.",
+      )
+      setAvailableServices([])
+    } finally {
+      setServicesLoading(false)
+    }
+  }, [connection])
+
+  useEffect(() => {
+    void loadServices()
+  }, [loadServices])
+
+  const subscribedServices: SubscriptionService[] = []
 
   const handleSubscribe = (service: SubscriptionService) => {
     if (!hasPayPal) {
@@ -163,13 +156,14 @@ export function SubscriptionInterface() {
     console.log("PayPal email saved:", email)
   }
 
-  const handleUnsubscribe = (serviceId: string) => {
+  const handleUnsubscribe = (serviceId: number) => {
     console.log("Unsubscribing from:", serviceId)
   }
 
   const totalSubscriptionCost = subscribedServices.reduce((total, service) => total + service.price, 0)
   const remainingYield = Math.max(availableYield - totalSubscriptionCost, 0)
-  const canPurchaseWhileLoading = isYieldLoading || !walletConnected
+  const dataLoading = isYieldLoading || servicesLoading
+  const canPurchaseWhileLoading = dataLoading || !walletConnected
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-4 sm:px-6 py-6 sm:py-8">
@@ -234,15 +228,27 @@ export function SubscriptionInterface() {
                     <Card key={service.id} className={`relative ${!canAfford ? "opacity-60" : ""}`}>
                       <CardContent className="p-4 sm:p-6">
                         <div className="flex items-start space-x-3 sm:space-x-4">
-                          {service.logo}
+                          {service.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={service.logoUrl}
+                              alt={`${service.name} logo`}
+                              className="w-8 h-8 rounded object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <Sparkles className="w-8 h-8 text-blue-600 flex-shrink-0" />
+                          )}
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-base sm:text-lg truncate">{service.name}</h3>
+                            <p className="text-xs text-muted-foreground mb-1 truncate">{service.provider}</p>
                             <p className="text-xs sm:text-sm text-muted-foreground mb-2 line-clamp-2">
                               {service.description}
                             </p>
                             <div className="flex items-center justify-between">
-                              <span className="text-lg sm:text-xl font-bold">${service.price}/mo</span>
-                              {!canAfford && !isYieldLoading && (
+                              <span className="text-lg sm:text-xl font-bold">
+                                ${service.price.toFixed(2)}/mo
+                              </span>
+                              {!canAfford && !dataLoading && (
                                 <Badge variant="destructive" className="text-xs">
                                   Insufficient Yield
                                 </Badge>
@@ -256,7 +262,11 @@ export function SubscriptionInterface() {
                           onClick={() => handleSubscribe(service)}
                           disabled={!canAfford}
                         >
-                          {canAfford ? "Subscribe" : isYieldLoading ? "Loading Yield" : "Need More Yield"}
+                          {canAfford
+                            ? "Subscribe"
+                            : dataLoading
+                            ? "Loading Data"
+                            : "Need More Yield"}
                         </Button>
                       </CardContent>
                     </Card>
@@ -264,9 +274,15 @@ export function SubscriptionInterface() {
                 })}
               </div>
 
-              {availableServices.length === 0 && (
+              {availableServices.length === 0 && !servicesLoading && (
                 <div className="text-center py-8 sm:py-12">
                   <p className="text-sm sm:text-base text-muted-foreground">No services available at the moment.</p>
+                </div>
+              )}
+              {servicesLoading && (
+                <div className="flex items-center justify-center py-8 sm:py-12 space-x-2 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm sm:text-base">Loading subscription catalog…</span>
                 </div>
               )}
             </TabsContent>
@@ -279,7 +295,16 @@ export function SubscriptionInterface() {
                       <CardContent className="p-4 sm:p-6">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-0">
                           <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
-                            {service.logo}
+                            {service.logoUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={service.logoUrl}
+                                alt={`${service.name} logo`}
+                                className="w-8 h-8 rounded object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <Sparkles className="w-8 h-8 text-blue-600 flex-shrink-0" />
+                            )}
                             <div className="min-w-0 flex-1">
                               <h3 className="font-semibold text-base sm:text-lg truncate">{service.name}</h3>
                               <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
@@ -290,7 +315,9 @@ export function SubscriptionInterface() {
 
                           <div className="flex items-center justify-between sm:justify-end space-x-4">
                             <div className="text-left sm:text-right">
-                              <p className="font-semibold text-sm sm:text-base">${service.price}/mo</p>
+                              <p className="font-semibold text-sm sm:text-base">
+                                ${service.price.toFixed(2)}/mo
+                              </p>
                               <div className="flex items-center space-x-1">
                                 <CheckCircle className="w-4 h-4 text-green-500" />
                                 <span className="text-xs sm:text-sm text-green-600">Active</span>

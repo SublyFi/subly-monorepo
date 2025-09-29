@@ -1,0 +1,30 @@
+[
+  {
+    "name": "AniMini+",
+    "monthlyPriceUsd": 0.99,
+    "details": "Stream 3 fresh anime episodes every month and unlock exclusive digital goodies.",
+    "logoUrl": "https://subly-company-logos.s3.us-east-1.amazonaws.com/animini.png",
+    "provider": "Animini+, Inc."
+  },
+  {
+    "name": "Netflix",
+    "monthlyPriceUsd": 7.99,
+    "details": "Unlimited movies, TV shows, and more. Standard with ads. ",
+    "logoUrl": "https://subly-company-logos.s3.us-east-1.amazonaws.com/Icon.jpeg",
+    "provider": "Netflix, Inc."
+  },
+  {
+    "name": "Netflix",
+    "monthlyPriceUsd": 17.99,
+    "details": "Unlimited movies, TV shows, and more. Standard without ads.",
+    "logoUrl": "https://subly-company-logos.s3.us-east-1.amazonaws.com/Icon.jpeg",
+    "provider": "Netflix, Inc."
+  },
+  {
+    "name": "Netflix",
+    "monthlyPriceUsd": 24.99,
+    "details": "Unlimited movies, TV shows, and more. Premium.",
+    "logoUrl": "https://subly-company-logos.s3.us-east-1.amazonaws.com/Icon.jpeg",
+    "provider": "Netflix, Inc."
+  }
+]
