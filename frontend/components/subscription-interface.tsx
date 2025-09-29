@@ -2,13 +2,24 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { usePrivy } from "@privy-io/react-auth"
+import { useWallets } from "@privy-io/react-auth/solana"
+import { Connection, PublicKey } from "@solana/web3.js"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Music, Youtube, Sparkles, CheckCircle, XCircle } from "lucide-react"
+import { Music, Youtube, Sparkles, CheckCircle, XCircle, Loader2 } from "lucide-react"
 import { PayPalSetupModal } from "./paypal-setup-modal"
+import {
+  fetchPayPalRecipient,
+  fetchSublyConfig,
+  fetchUserStakeEntries,
+  formatUsdcFromSmallest,
+  type PayPalRecipientDetails,
+} from "@/lib/subly"
 
 interface SubscriptionService {
   id: string
@@ -19,10 +30,81 @@ interface SubscriptionService {
   isSubscribed?: boolean
 }
 
+const DEVNET_ENDPOINT =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT ?? "https://api.devnet.solana.com"
+
 export function SubscriptionInterface() {
-  const [availableYield] = useState(30) // $30 monthly yield available
+  const [availableYield, setAvailableYield] = useState(0)
+  const [totalStaked, setTotalStaked] = useState(0)
+  const [isYieldLoading, setIsYieldLoading] = useState(false)
   const [showPayPalModal, setShowPayPalModal] = useState(false)
-  const [hasPayPal, setHasPayPal] = useState(false) // Track PayPal setup status
+  const [hasPayPal, setHasPayPal] = useState(false)
+
+  const { ready, authenticated } = usePrivy()
+  const { wallets, ready: walletsReady } = useWallets()
+
+  const activeWallet = wallets[0]
+  const walletConnected =
+    ready && authenticated && walletsReady && Boolean(activeWallet?.address)
+
+  const connection = useMemo(
+    () => new Connection(DEVNET_ENDPOINT, "confirmed"),
+    [],
+  )
+
+  const updatePayPalState = useCallback((details: PayPalRecipientDetails | null) => {
+    setHasPayPal(Boolean(details?.configured && details.receiver))
+  }, [])
+
+  const loadYieldData = useCallback(async () => {
+    if (!walletConnected || !activeWallet?.address) {
+      setAvailableYield(0)
+      updatePayPalState(null)
+      return
+    }
+
+    try {
+      setIsYieldLoading(true)
+      const userPk = new PublicKey(activeWallet.address)
+
+      const [config, stakeEntries, payPalDetails] = await Promise.all([
+        fetchSublyConfig(connection),
+        fetchUserStakeEntries(connection, userPk),
+        fetchPayPalRecipient(connection, userPk),
+      ])
+
+      updatePayPalState(payPalDetails)
+
+      const totalPrincipal = stakeEntries.reduce((sum, entry) => sum + entry.principal, 0n)
+      if (totalPrincipal === 0n) {
+        setAvailableYield(0)
+        setTotalStaked(0)
+        return
+      }
+
+      const principalFormatted = Number(formatUsdcFromSmallest(totalPrincipal))
+      setTotalStaked(Number.isFinite(principalFormatted) ? principalFormatted : 0)
+
+      const annualYieldSmallest = (totalPrincipal * BigInt(config.apyBps)) / 10000n
+      const monthlyYieldSmallest = annualYieldSmallest / 12n
+      const monthlyYield = Number(monthlyYieldSmallest) / 1_000_000
+
+      setAvailableYield(Number.isFinite(monthlyYield) ? monthlyYield : 0)
+    } catch (error) {
+      console.error("Failed to load yield data", error)
+      toast.error(
+        error instanceof Error ? error.message : "Unable to load staking yield information.",
+      )
+      setAvailableYield(0)
+      setTotalStaked(0)
+    } finally {
+      setIsYieldLoading(false)
+    }
+  }, [activeWallet, connection, updatePayPalState, walletConnected])
+
+  useEffect(() => {
+    void loadYieldData()
+  }, [loadYieldData])
 
   const availableServices: SubscriptionService[] = [
     {
@@ -86,7 +168,8 @@ export function SubscriptionInterface() {
   }
 
   const totalSubscriptionCost = subscribedServices.reduce((total, service) => total + service.price, 0)
-  const remainingYield = availableYield - totalSubscriptionCost
+  const remainingYield = Math.max(availableYield - totalSubscriptionCost, 0)
+  const canPurchaseWhileLoading = isYieldLoading || !walletConnected
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-4 sm:px-6 py-6 sm:py-8">
@@ -95,8 +178,24 @@ export function SubscriptionInterface() {
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-0">
             <div>
-              <h3 className="text-base sm:text-lg font-semibold">Monthly Yield Available</h3>
-              <p className="text-2xl sm:text-3xl font-bold text-green-600">${availableYield.toFixed(2)}</p>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-base sm:text-lg font-semibold">Monthly Yield Available</h3>
+                {isYieldLoading && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />}
+              </div>
+              {walletConnected ? (
+                <>
+                  <p className="text-2xl sm:text-3xl font-bold text-green-600">
+                    ${availableYield.toFixed(2)}
+                  </p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                    Total Staked: <span className="font-medium text-foreground">${totalStaked.toFixed(2)}</span>
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm sm:text-base text-muted-foreground">
+                  Connect your wallet to view yield
+                </p>
+              )}
             </div>
             <div className="text-left sm:text-right">
               <p className="text-xs sm:text-sm text-muted-foreground">Current Subscriptions</p>
@@ -129,7 +228,7 @@ export function SubscriptionInterface() {
             <TabsContent value="subscribe" className="space-y-4 sm:space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {availableServices.map((service) => {
-                  const canAfford = remainingYield >= service.price
+                  const canAfford = !canPurchaseWhileLoading && remainingYield >= service.price
 
                   return (
                     <Card key={service.id} className={`relative ${!canAfford ? "opacity-60" : ""}`}>
@@ -143,7 +242,7 @@ export function SubscriptionInterface() {
                             </p>
                             <div className="flex items-center justify-between">
                               <span className="text-lg sm:text-xl font-bold">${service.price}/mo</span>
-                              {!canAfford && (
+                              {!canAfford && !isYieldLoading && (
                                 <Badge variant="destructive" className="text-xs">
                                   Insufficient Yield
                                 </Badge>
@@ -157,7 +256,7 @@ export function SubscriptionInterface() {
                           onClick={() => handleSubscribe(service)}
                           disabled={!canAfford}
                         >
-                          {canAfford ? "Subscribe" : "Need More Yield"}
+                          {canAfford ? "Subscribe" : isYieldLoading ? "Loading Yield" : "Need More Yield"}
                         </Button>
                       </CardContent>
                     </Card>
