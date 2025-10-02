@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Header } from "@/components/header"
 import { StakeInterface } from "@/components/stake-interface"
 import { SubscriptionInterface } from "@/components/subscription-interface"
@@ -8,6 +8,20 @@ import { ProfileInterface } from "@/components/profile-interface"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("stake")
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab?: string }>).detail
+      if (detail?.tab) {
+        setActiveTab(detail.tab)
+      }
+    }
+
+    document.addEventListener("subly:navigate-tab", handler as EventListener)
+    return () => {
+      document.removeEventListener("subly:navigate-tab", handler as EventListener)
+    }
+  }, [])
 
   const renderContent = () => {
     switch (activeTab) {

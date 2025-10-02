@@ -14,13 +14,16 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  fetchSublyConfig,
   fetchUserStakeEntries,
-  formatUsdcFromSmallest,
+  formatUsdcAmountDisplay,
+  formatUsdcFromSmallestToDisplay,
   parseUsdcAmount,
   prepareStakeTransaction,
   prepareUnstakeTransaction,
   type StakeEntrySummary,
 } from "@/lib/subly"
+import { getAssociatedTokenAddress } from "@solana/spl-token"
 
 const DEVNET_ENDPOINT =
   process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT ?? "https://api.devnet.solana.com"
@@ -33,6 +36,8 @@ export function StakeInterface() {
   const [isFetchingTranches, setIsFetchingTranches] = useState(false)
   const [availableTranches, setAvailableTranches] = useState<StakeEntrySummary[]>([])
   const [selectedTrancheId, setSelectedTrancheId] = useState<number | null>(null)
+  const [usdcBalance, setUsdcBalance] = useState<bigint>(0n)
+  const [isBalanceLoading, setIsBalanceLoading] = useState(false)
 
   const { ready, authenticated } = usePrivy()
   const { wallets, ready: walletsReady } = useWallets()
@@ -64,6 +69,35 @@ export function StakeInterface() {
     setAvailableTranches([])
     setSelectedTrancheId(null)
   }, [])
+
+  const loadBalance = useCallback(async () => {
+    if (!walletConnected || !activeWallet?.address) {
+      setUsdcBalance(0n)
+      return
+    }
+
+    try {
+      setIsBalanceLoading(true)
+      const config = await fetchSublyConfig(connection)
+      const userPk = new PublicKey(activeWallet.address)
+      const ata = await getAssociatedTokenAddress(config.usdcMint, userPk)
+      const balance = await connection
+        .getTokenAccountBalance(ata)
+        .catch(() => null)
+
+      if (!balance) {
+        setUsdcBalance(0n)
+        return
+      }
+
+      setUsdcBalance(BigInt(balance.value.amount))
+    } catch (error) {
+      console.error("Failed to fetch USDC balance", error)
+      setUsdcBalance(0n)
+    } finally {
+      setIsBalanceLoading(false)
+    }
+  }, [activeWallet, connection, walletConnected])
 
   const loadTranches = useCallback(async () => {
     if (!walletConnected || !activeWallet?.address) {
@@ -122,6 +156,7 @@ export function StakeInterface() {
 
       const amount = parseUsdcAmount(stakeAmount)
       const userPublicKey = new PublicKey(activeWallet.address)
+      const formattedStakeAmount = formatUsdcAmountDisplay(stakeAmount || "0")
 
       const { transaction, blockhash } = await prepareStakeTransaction(
         connection,
@@ -147,7 +182,7 @@ export function StakeInterface() {
         "confirmed",
       )
 
-      toast.success(`Staked ${stakeAmount} USDC`, {
+      toast.success(`Staked ${formattedStakeAmount} USDC`, {
         description: `${signatureString.slice(0, 8)}…${signatureString.slice(-8)}`,
         action: {
           label: "Explorer",
@@ -161,7 +196,7 @@ export function StakeInterface() {
       })
 
       setStakeAmount("")
-      await loadTranches()
+      await Promise.all([loadTranches(), loadBalance()])
     } catch (error) {
       console.error("Failed to stake USDC", error)
       toast.error(
@@ -175,6 +210,7 @@ export function StakeInterface() {
   }, [
     activeWallet,
     connection,
+    loadBalance,
     loadTranches,
     signAndSendTransaction,
     stakeAmount,
@@ -216,7 +252,7 @@ export function StakeInterface() {
       )
 
       const principalText = selectedTranche
-        ? formatUsdcFromSmallest(selectedTranche.principal)
+        ? formatUsdcFromSmallestToDisplay(selectedTranche.principal)
         : undefined
 
       toast.success(
@@ -237,7 +273,7 @@ export function StakeInterface() {
         },
       )
 
-      await loadTranches()
+      await Promise.all([loadTranches(), loadBalance()])
     } catch (error) {
       console.error("Failed to unstake", error)
       toast.error(
@@ -249,6 +285,7 @@ export function StakeInterface() {
   }, [
     activeWallet,
     connection,
+    loadBalance,
     loadTranches,
     selectedTranche,
     selectedTrancheId,
@@ -259,11 +296,13 @@ export function StakeInterface() {
   useEffect(() => {
     if (!walletConnected) {
       resetTranches()
+      setUsdcBalance(0n)
       return
     }
 
     void loadTranches()
-  }, [loadTranches, resetTranches, walletConnected]);
+    void loadBalance()
+  }, [loadBalance, loadTranches, resetTranches, walletConnected]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8 px-4 sm:px-6 py-6 sm:py-8">
@@ -320,6 +359,23 @@ export function StakeInterface() {
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
                       USDC
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-xs sm:text-sm text-muted-foreground">
+                    <span>Wallet Balance</span>
+                    {walletConnected ? (
+                      isBalanceLoading ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Loading…</span>
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-foreground">
+                          {formatUsdcFromSmallestToDisplay(usdcBalance)} USDC
+                        </span>
+                      )
+                    ) : (
+                      <span>Connect wallet</span>
+                    )}
                   </div>
                 </div>
 
@@ -380,13 +436,17 @@ export function StakeInterface() {
                       <div className="flex justify-between items-center">
                         <span className="text-xs sm:text-sm text-muted-foreground">Annual Yield</span>
                         <span className="font-semibold text-foreground text-sm sm:text-base">
-                          ${stakeAmount ? (Number.parseFloat(stakeAmount) * 0.1).toFixed(2) : "0.00"}
+                          {formatUsdcAmountDisplay(
+                            stakeAmount ? Number.parseFloat(stakeAmount) * 0.1 : 0,
+                          )} USDC
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-xs sm:text-sm text-muted-foreground">Monthly Available</span>
                         <span className="font-semibold text-accent text-sm sm:text-base">
-                          ${stakeAmount ? ((Number.parseFloat(stakeAmount) * 0.1) / 12).toFixed(2) : "0.00"}
+                          {formatUsdcAmountDisplay(
+                            stakeAmount ? (Number.parseFloat(stakeAmount) * 0.1) / 12 : 0,
+                          )} USDC
                         </span>
                       </div>
                     </div>
@@ -444,7 +504,7 @@ export function StakeInterface() {
                 {!isFetchingTranches && availableTranches.length > 0 && (
                   <div className="space-y-3">
                     {availableTranches.map((entry) => {
-                      const principal = formatUsdcFromSmallest(entry.principal)
+                      const principal = formatUsdcFromSmallestToDisplay(entry.principal)
                       const unlockDate = new Date(entry.lockEndTs * 1000)
                       const isSelected = selectedTrancheId === entry.trancheId
 
@@ -483,7 +543,10 @@ export function StakeInterface() {
                     <CardContent className="p-4">
                       <p className="text-sm text-muted-foreground">
                         You are unstaking tranche #{selectedTranche.trancheId} with
-                        <span className="font-semibold text-foreground"> {formatUsdcFromSmallest(selectedTranche.principal)} USDC</span> principal.
+                        <span className="font-semibold text-foreground">
+                          {" "}
+                          {formatUsdcFromSmallestToDisplay(selectedTranche.principal)} USDC
+                        </span>{" "}principal.
                       </p>
                     </CardContent>
                   </Card>

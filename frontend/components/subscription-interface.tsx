@@ -2,48 +2,73 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { usePrivy } from "@privy-io/react-auth"
-import { useWallets } from "@privy-io/react-auth/solana"
+import { useSignAndSendTransaction, useWallets } from "@privy-io/react-auth/solana"
 import { Connection, PublicKey } from "@solana/web3.js"
+import bs58 from "bs58"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, CheckCircle, XCircle, Loader2 } from "lucide-react"
-import { PayPalSetupModal } from "./paypal-setup-modal"
+import { CheckCircle, Loader2, Sparkles, XCircle } from "lucide-react"
 import {
   fetchPayPalRecipient,
   fetchSublyConfig,
-  fetchUserStakeEntries,
   fetchSubscriptionServices,
+  fetchUserStakeEntries,
+  fetchUserSubscriptions,
+  formatUsdcAmountDisplay,
   formatUsdcFromSmallest,
+  prepareSubscribeServiceTransaction,
   type PayPalRecipientDetails,
+  type SubscriptionServiceEntry,
+  type UserSubscriptionEntry,
 } from "@/lib/subly"
 
-interface SubscriptionService {
+interface SubscriptionServiceCard {
   id: number
   name: string
   price: number
   description: string
   logoUrl: string
   provider: string
-  isSubscribed?: boolean
+}
+
+interface ResolvedSubscriptionCard extends SubscriptionServiceCard {
+  subscriptionId: number
+  status: "ACTIVE" | "PENDING_CANCELLATION" | "CANCELLED"
+  nextBillingTs: number
 }
 
 const DEVNET_ENDPOINT =
   process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT ?? "https://api.devnet.solana.com"
+
+const STATUS_LABELS: Record<ResolvedSubscriptionCard["status"], string> = {
+  ACTIVE: "Active",
+  PENDING_CANCELLATION: "Pending Cancellation",
+  CANCELLED: "Cancelled",
+}
+
+function navigateToTab(tab: string) {
+  if (typeof document === "undefined") {
+    return
+  }
+  document.dispatchEvent(new CustomEvent("subly:navigate-tab", { detail: { tab } }))
+}
 
 export function SubscriptionInterface() {
   const [availableYield, setAvailableYield] = useState(0)
   const [totalStaked, setTotalStaked] = useState(0)
   const [isYieldLoading, setIsYieldLoading] = useState(false)
   const [servicesLoading, setServicesLoading] = useState(false)
-  const [showPayPalModal, setShowPayPalModal] = useState(false)
+  const [availableServices, setAvailableServices] = useState<SubscriptionServiceCard[]>([])
+  const [userSubscriptions, setUserSubscriptions] = useState<UserSubscriptionEntry[]>([])
   const [hasPayPal, setHasPayPal] = useState(false)
-  const [availableServices, setAvailableServices] = useState<SubscriptionService[]>([])
+  const [processingServiceId, setProcessingServiceId] = useState<number | null>(null)
 
   const { ready, authenticated } = usePrivy()
   const { wallets, ready: walletsReady } = useWallets()
+  const { signAndSendTransaction } = useSignAndSendTransaction()
 
   const activeWallet = wallets[0]
   const walletConnected =
@@ -105,23 +130,21 @@ export function SubscriptionInterface() {
     }
   }, [activeWallet, connection, updatePayPalState, walletConnected])
 
-  useEffect(() => {
-    void loadYieldData()
-  }, [loadYieldData])
-
   const loadServices = useCallback(async () => {
     try {
       setServicesLoading(true)
       const services = await fetchSubscriptionServices(connection)
 
-      const mapped = services.map((service) => ({
-        id: service.id,
-        name: service.name,
-        price: Number(formatUsdcFromSmallest(service.monthlyPrice)),
-        description: service.details,
-        logoUrl: service.logoUrl,
-        provider: service.provider,
-      }))
+      const mapped: SubscriptionServiceCard[] = services
+        .map((service: SubscriptionServiceEntry) => ({
+          id: service.id,
+          name: service.name,
+          price: Number(formatUsdcFromSmallest(service.monthlyPrice)),
+          description: service.details,
+          logoUrl: service.logoUrl,
+          provider: service.provider,
+        }))
+        .sort((a, b) => a.id - b.id)
 
       setAvailableServices(mapped)
     } catch (error) {
@@ -135,39 +158,166 @@ export function SubscriptionInterface() {
     }
   }, [connection])
 
+  const loadUserSubscriptions = useCallback(async () => {
+    if (!walletConnected || !activeWallet?.address) {
+      setUserSubscriptions([])
+      return
+    }
+
+    try {
+      const userPk = new PublicKey(activeWallet.address)
+      const subscriptions = await fetchUserSubscriptions(connection, userPk)
+      setUserSubscriptions(subscriptions)
+    } catch (error) {
+      console.error("Failed to load user subscriptions", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to load your subscriptions.",
+      )
+      setUserSubscriptions([])
+    }
+  }, [activeWallet, connection, walletConnected])
+
+  useEffect(() => {
+    void loadYieldData()
+  }, [loadYieldData])
+
   useEffect(() => {
     void loadServices()
   }, [loadServices])
 
-  const subscribedServices: SubscriptionService[] = []
+  useEffect(() => {
+    void loadUserSubscriptions()
+  }, [loadUserSubscriptions])
 
-  const handleSubscribe = (service: SubscriptionService) => {
-    if (!hasPayPal) {
-      setShowPayPalModal(true)
-      return
+  const resolvedSubscriptions = useMemo<ResolvedSubscriptionCard[]>(() => {
+    if (!availableServices.length || !userSubscriptions.length) {
+      return []
     }
 
-    // Handle subscription logic
-    console.log("Subscribing to:", service.name)
-  }
+    return userSubscriptions
+      .map((subscription) => {
+        const service = availableServices.find((s) => s.id === subscription.serviceId)
+        if (!service) {
+          return null
+        }
 
-  const handlePayPalSave = (email: string) => {
-    setHasPayPal(true)
-    console.log("PayPal email saved:", email)
-  }
+        const priceNumber = Number(formatUsdcFromSmallest(subscription.monthlyPrice))
 
-  const handleUnsubscribe = (serviceId: number) => {
-    console.log("Unsubscribing from:", serviceId)
-  }
+        return {
+          subscriptionId: subscription.id,
+          serviceId: subscription.serviceId,
+          name: service.name,
+          description: service.description,
+          provider: service.provider,
+          logoUrl: service.logoUrl,
+          price: Number.isFinite(priceNumber) ? priceNumber : 0,
+          status: subscription.status,
+          nextBillingTs: subscription.nextBillingTs,
+        }
+      })
+      .filter(Boolean) as ResolvedSubscriptionCard[]
+  }, [availableServices, userSubscriptions])
 
-  const totalSubscriptionCost = subscribedServices.reduce((total, service) => total + service.price, 0)
+  const subscribedServiceIds = useMemo(() => {
+    return new Set(resolvedSubscriptions.map((subscription) => subscription.serviceId))
+  }, [resolvedSubscriptions])
+
+  const totalSubscriptionCost = resolvedSubscriptions.reduce(
+    (total, subscription) => total + subscription.price,
+    0,
+  )
   const remainingYield = Math.max(availableYield - totalSubscriptionCost, 0)
   const dataLoading = isYieldLoading || servicesLoading
-  const canPurchaseWhileLoading = dataLoading || !walletConnected
+
+  const handleSubscribe = useCallback(
+    async (service: SubscriptionServiceCard) => {
+      if (!walletConnected || !activeWallet?.address) {
+        toast.error("Connect a wallet before subscribing to a service.")
+        return
+      }
+
+      if (!hasPayPal) {
+        toast.error("Add your PayPal payout information in the Profile tab before subscribing.", {
+          action: {
+            label: "Go to Profile",
+            onClick: () => navigateToTab("profile"),
+          },
+        })
+        navigateToTab("profile")
+        return
+      }
+
+      try {
+        setProcessingServiceId(service.id)
+        const userPk = new PublicKey(activeWallet.address)
+
+        const { transaction, blockhash } = await prepareSubscribeServiceTransaction(
+          connection,
+          userPk,
+          service.id,
+        )
+
+        const serialized = transaction.serialize({ requireAllSignatures: false })
+        const { signature } = await signAndSendTransaction({
+          transaction: serialized,
+          wallet: activeWallet,
+          chain: "solana:devnet",
+        })
+
+        const signatureString = bs58.encode(signature)
+
+        await connection.confirmTransaction(
+          {
+            signature: signatureString,
+            blockhash: blockhash.blockhash,
+            lastValidBlockHeight: blockhash.lastValidBlockHeight,
+          },
+          "confirmed",
+        )
+
+        toast.success(`Subscribed to ${service.name}`, {
+          description: `${signatureString.slice(0, 8)}…${signatureString.slice(-8)}`,
+          action: {
+            label: "Explorer",
+            onClick: () =>
+              window.open(
+                `https://explorer.solana.com/tx/${signatureString}?cluster=devnet`,
+                "_blank",
+                "noopener,noreferrer",
+              ),
+          },
+        })
+
+        await Promise.all([loadYieldData(), loadUserSubscriptions()])
+      } catch (error) {
+        console.error("Failed to subscribe to service", error)
+        toast.error(
+          error instanceof Error ? error.message : "Subscription failed. Please try again.",
+        )
+      } finally {
+        setProcessingServiceId(null)
+      }
+    },
+    [
+      activeWallet,
+      connection,
+      hasPayPal,
+      loadUserSubscriptions,
+      loadYieldData,
+      signAndSendTransaction,
+      walletConnected,
+    ],
+  )
+
+  const handleUnsubscribe = useCallback((serviceId: number) => {
+    console.log("Unsubscribe flow for service", serviceId)
+    toast.info("Unsubscribe functionality is coming soon.")
+  }, [])
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-4 sm:px-6 py-6 sm:py-8">
-      {/* Yield Balance Card */}
       <Card className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20">
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-0">
@@ -179,10 +329,10 @@ export function SubscriptionInterface() {
               {walletConnected ? (
                 <>
                   <p className="text-2xl sm:text-3xl font-bold text-green-600">
-                    ${availableYield.toFixed(2)}
+                    {formatUsdcAmountDisplay(availableYield)} USDC
                   </p>
                   <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                    Total Staked: <span className="font-medium text-foreground">${totalStaked.toFixed(2)}</span>
+                    Total Staked: <span className="font-medium text-foreground">{formatUsdcAmountDisplay(totalStaked)} USDC</span>
                   </p>
                 </>
               ) : (
@@ -193,16 +343,15 @@ export function SubscriptionInterface() {
             </div>
             <div className="text-left sm:text-right">
               <p className="text-xs sm:text-sm text-muted-foreground">Current Subscriptions</p>
-              <p className="text-lg sm:text-xl font-semibold">${totalSubscriptionCost.toFixed(2)}</p>
+              <p className="text-lg sm:text-xl font-semibold">{formatUsdcAmountDisplay(totalSubscriptionCost)} USDC</p>
               <p className="text-xs sm:text-sm text-muted-foreground">
-                Remaining: <span className="text-green-600 font-medium">${remainingYield.toFixed(2)}</span>
+                Remaining: <span className="text-green-600 font-medium">{formatUsdcAmountDisplay(remainingYield)} USDC</span>
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Main Interface */}
       <Card>
         <CardHeader className="px-4 sm:px-6">
           <CardTitle className="text-xl sm:text-2xl">Subscription Management</CardTitle>
@@ -221,8 +370,14 @@ export function SubscriptionInterface() {
 
             <TabsContent value="subscribe" className="space-y-4 sm:space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                {availableServices.map((service) => {
-                  const canAfford = !canPurchaseWhileLoading && remainingYield >= service.price
+                {availableServices
+                  .filter((service) => !subscribedServiceIds.has(service.id))
+                  .map((service) => {
+                    const busy = processingServiceId === service.id
+                    const canAfford =
+                      walletConnected && !dataLoading && remainingYield >= service.price && !busy
+                    const disabled =
+                      !walletConnected || dataLoading || remainingYield < service.price || busy
 
                   return (
                     <Card key={service.id} className={`relative ${!canAfford ? "opacity-60" : ""}`}>
@@ -244,15 +399,10 @@ export function SubscriptionInterface() {
                             <p className="text-xs sm:text-sm text-muted-foreground mb-2 line-clamp-2">
                               {service.description}
                             </p>
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center">
                               <span className="text-lg sm:text-xl font-bold">
-                                ${service.price.toFixed(2)}/mo
+                                {formatUsdcAmountDisplay(service.price)} USDC/mo
                               </span>
-                              {!canAfford && !dataLoading && (
-                                <Badge variant="destructive" className="text-xs">
-                                  Insufficient Yield
-                                </Badge>
-                              )}
                             </div>
                           </div>
                         </div>
@@ -260,13 +410,17 @@ export function SubscriptionInterface() {
                         <Button
                           className="w-full mt-4 text-sm sm:text-base"
                           onClick={() => handleSubscribe(service)}
-                          disabled={!canAfford}
+                          disabled={disabled}
                         >
-                          {canAfford
+                          {busy
+                            ? "Subscribing..."
+                            : canAfford
                             ? "Subscribe"
+                            : !walletConnected
+                            ? "Connect Wallet"
                             : dataLoading
                             ? "Loading Data"
-                            : "Need More Yield"}
+                            : "Insufficient Yield"}
                         </Button>
                       </CardContent>
                     </Card>
@@ -288,55 +442,73 @@ export function SubscriptionInterface() {
             </TabsContent>
 
             <TabsContent value="unsubscribe" className="space-y-4 sm:space-y-6">
-              {subscribedServices.length > 0 ? (
+              {resolvedSubscriptions.length > 0 ? (
                 <div className="space-y-4">
-                  {subscribedServices.map((service) => (
-                    <Card key={service.id}>
-                      <CardContent className="p-4 sm:p-6">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-0">
-                          <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
-                            {service.logoUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={service.logoUrl}
-                                alt={`${service.name} logo`}
-                                className="w-8 h-8 rounded object-cover flex-shrink-0"
-                              />
-                            ) : (
-                              <Sparkles className="w-8 h-8 text-blue-600 flex-shrink-0" />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <h3 className="font-semibold text-base sm:text-lg truncate">{service.name}</h3>
-                              <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
-                                {service.description}
-                              </p>
-                            </div>
-                          </div>
+                  {resolvedSubscriptions.map((subscription) => {
+                    const nextBillingLabel =
+                      subscription.nextBillingTs > 0
+                        ? new Date(subscription.nextBillingTs * 1000).toLocaleDateString()
+                        : "Pending"
 
-                          <div className="flex items-center justify-between sm:justify-end space-x-4">
-                            <div className="text-left sm:text-right">
-                              <p className="font-semibold text-sm sm:text-base">
-                                ${service.price.toFixed(2)}/mo
-                              </p>
-                              <div className="flex items-center space-x-1">
-                                <CheckCircle className="w-4 h-4 text-green-500" />
-                                <span className="text-xs sm:text-sm text-green-600">Active</span>
+                    return (
+                      <Card key={subscription.subscriptionId}>
+                        <CardContent className="p-4 sm:p-6">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-0">
+                            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
+                              {subscription.logoUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={subscription.logoUrl}
+                                  alt={`${subscription.name} logo`}
+                                  className="w-8 h-8 rounded object-cover flex-shrink-0"
+                                />
+                              ) : (
+                                <Sparkles className="w-8 h-8 text-blue-600 flex-shrink-0" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-semibold text-base sm:text-lg truncate">
+                                  {subscription.name}
+                                </h3>
+                                <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
+                                  {subscription.description}
+                                </p>
+                                <div className="flex items-center space-x-2 mt-1">
+                                  <Badge variant="outline" className="text-[10px] sm:text-xs">
+                                    {STATUS_LABELS[subscription.status]}
+                                  </Badge>
+                                  <span className="text-[10px] sm:text-xs text-muted-foreground">
+                                    Next billing: {nextBillingLabel}
+                                  </span>
+                                </div>
                               </div>
                             </div>
 
-                            <Button
-                              variant="destructive"
-                              onClick={() => handleUnsubscribe(service.id)}
-                              size="sm"
-                              className="text-xs sm:text-sm"
-                            >
-                              Unsubscribe
-                            </Button>
+                            <div className="flex items-center justify-between sm:justify-end space-x-4">
+                             <div className="text-left sm:text-right">
+                                <p className="font-semibold text-sm sm:text-base">
+                                  {formatUsdcAmountDisplay(subscription.price)} USDC/mo
+                                </p>
+                                <div className="flex items-center space-x-1 justify-start sm:justify-end">
+                                  <CheckCircle className="w-4 h-4 text-green-500" />
+                                  <span className="text-xs sm:text-sm text-green-600">Active</span>
+                                </div>
+                              </div>
+
+                              <Button
+                                variant="destructive"
+                                onClick={() => handleUnsubscribe(subscription.serviceId)}
+                                size="sm"
+                                className="text-xs sm:text-sm"
+                                disabled
+                              >
+                                Unsubscribe
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-8 sm:py-12">
@@ -351,9 +523,6 @@ export function SubscriptionInterface() {
           </Tabs>
         </CardContent>
       </Card>
-
-      {/* PayPal Setup Modal */}
-      <PayPalSetupModal isOpen={showPayPalModal} onClose={() => setShowPayPalModal(false)} onSave={handlePayPalSave} />
     </div>
   )
 }

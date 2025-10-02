@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
-import { ConfirmOptions, PublicKey } from "@solana/web3.js";
+import { ConfirmOptions, Finality, PublicKey } from "@solana/web3.js";
 
 import { SublySolanaProgram } from "../target/types/subly_solana_program";
 import {
@@ -11,8 +11,9 @@ import {
 const SEED_CONFIG = "config";
 const SEED_USER_SUBSCRIPTIONS = "user_subscriptions";
 const SEED_REGISTRY = "subscription_registry";
+const BILLING_PERIOD_SECONDS = 30 * 24 * 60 * 60; // must match on-chain constant
 
-const commitment: ConfirmOptions["commitment"] = (process.env.COMMITMENT as ConfirmOptions["commitment"]) ?? "confirmed";
+const finality: Finality = (process.env.COMMITMENT as Finality) ?? "confirmed";
 const START_SLOT = Number(process.env.NEW_SUBS_START_SLOT ?? 0);
 const FETCH_LIMIT = Number(process.env.NEW_SUBS_FETCH_LIMIT ?? 100);
 const MAX_TRANSACTIONS = Number(process.env.NEW_SUBS_MAX_TX ?? 1000);
@@ -65,7 +66,7 @@ async function main() {
     const signatures = await provider.connection.getSignaturesForAddress(
       program.programId,
       { before, limit: FETCH_LIMIT },
-      commitment,
+      finality,
     );
 
     if (signatures.length === 0) {
@@ -135,6 +136,70 @@ async function handleActivation(
   const serviceIdNum = activation.serviceId.toNumber();
   const serviceName = serviceNameById.get(serviceIdNum) ?? `service-${serviceIdNum}`;
 
+  const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from(SEED_USER_SUBSCRIPTIONS), activation.user.toBuffer()],
+    program.programId,
+  );
+
+  const userSubscriptionsAccount = await program.account.userSubscriptions.fetchNullable(
+    userSubscriptionsPda,
+  );
+  if (!userSubscriptionsAccount) {
+    console.warn("  -> User subscriptions account not found. Skipping payout.");
+    return;
+  }
+
+  const subscriptionEntry = userSubscriptionsAccount.subscriptions.find((subscription: any) => {
+    if (subscription.id?.eq) {
+      return subscription.id.eq(activation.subscriptionId);
+    }
+    return Number(subscription.id) === activation.subscriptionId.toNumber();
+  });
+
+  if (!subscriptionEntry) {
+    console.warn("  -> Subscription entry not found in PDA. Skipping payout.");
+    return;
+  }
+
+  const toNumber = (value: any): number => {
+    if (!value) {
+      return 0;
+    }
+    if (typeof value === "number") {
+      return value;
+    }
+    if (typeof value === "bigint") {
+      return Number(value);
+    }
+    if (typeof value === "string") {
+      return Number(value);
+    }
+    if (typeof value.toNumber === "function") {
+      return value.toNumber();
+    }
+    if (typeof value.toString === "function") {
+      return Number(value.toString());
+    }
+    return Number(value);
+  };
+
+  const startedAt = toNumber(subscriptionEntry.startedAt ?? subscriptionEntry.started_at);
+  const lastPaymentTs = toNumber(
+    subscriptionEntry.lastPaymentTs ?? subscriptionEntry.last_payment_ts,
+  );
+  const nextBillingTs = toNumber(
+    subscriptionEntry.nextBillingTs ?? subscriptionEntry.next_billing_ts,
+  );
+
+  const alreadyProcessed =
+    lastPaymentTs > startedAt ||
+    nextBillingTs > startedAt + BILLING_PERIOD_SECONDS
+
+  if (alreadyProcessed) {
+    console.log("  -> Initial payout already processed. Skipping duplicate.");
+    return;
+  }
+
   await payPalClient.createPayout(
     buildDueEntryPayload({
       recipientType: activation.recipientType,
@@ -145,17 +210,12 @@ async function handleActivation(
     }),
   );
 
-  const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from(SEED_USER_SUBSCRIPTIONS), activation.user.toBuffer()],
-    program.programId,
-  );
-
   const paymentSig = await program.methods
     .recordSubscriptionPayment({
       subscriptionId: activation.subscriptionId,
       paymentTs: null,
     })
-    .accounts({
+    .accountsStrict({
       config: configPda,
       operator: program.provider.wallet.publicKey,
       user: activation.user,
@@ -175,7 +235,7 @@ async function decodeEvents(
   let tx = null;
   while (attempts < 5 && !tx) {
     tx = await provider.connection.getTransaction(signature, {
-      commitment,
+      commitment: finality,
     });
     if (!tx) {
       await new Promise((resolve) => setTimeout(resolve, 200));

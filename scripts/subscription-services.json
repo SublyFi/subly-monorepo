@@ -1,5 +1,12 @@
 [
   {
+    "name": "AniClips",
+    "monthlyPriceUsd": 0.09,
+    "details": "Get 10 fresh anime highlight clips every month. Includes stickers and GIFs.",
+    "logoUrl": "https://subly-company-logos.s3.us-east-1.amazonaws.com/aniclips.png",
+    "provider": "AniClips, Inc."
+  },
+  {
     "name": "AniMini+",
     "monthlyPriceUsd": 0.99,
     "details": "Stream 3 fresh anime episodes every month and unlock exclusive digital goodies.",

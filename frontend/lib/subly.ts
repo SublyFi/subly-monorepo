@@ -171,13 +171,75 @@ export async function fetchSubscriptionServices(
 
   return services.map((service) => ({
     id: Number(service.id),
-    creator: new PublicKey(service.creator),
+    creator:
+      service.creator instanceof PublicKey
+        ? (service.creator as PublicKey)
+        : new PublicKey(service.creator),
     name: String(service.name),
     monthlyPrice: BigInt(service.monthly_price_usdc.toString()),
     details: String(service.details),
     logoUrl: String(service.logo_url),
     provider: String(service.provider),
     createdAt: Number(service.created_at),
+  }))
+}
+
+export type UserSubscriptionEntry = {
+  id: number
+  serviceId: number
+  monthlyPrice: bigint
+  status: "ACTIVE" | "PENDING_CANCELLATION" | "CANCELLED"
+  startedAt: number
+  lastPaymentTs: number
+  nextBillingTs: number
+  pendingUntilTs: number
+}
+
+function mapSubscriptionStatus(raw: any): UserSubscriptionEntry["status"] {
+  if (!raw || typeof raw !== "object") {
+    return "ACTIVE"
+  }
+
+  const [variant] = Object.keys(raw)
+  switch (variant?.toLowerCase()) {
+    case "pendingcancellation":
+    case "pending_cancellation":
+      return "PENDING_CANCELLATION"
+    case "cancelled":
+      return "CANCELLED"
+    case "active":
+    default:
+      return "ACTIVE"
+  }
+}
+
+export async function fetchUserSubscriptions(
+  connection: Connection,
+  user: PublicKey,
+): Promise<UserSubscriptionEntry[]> {
+  const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
+    [USER_SUBSCRIPTIONS_SEED, user.toBuffer()],
+    PROGRAM_ID,
+  )
+
+  const accountInfo = await connection.getAccountInfo(userSubscriptionsPda)
+  if (!accountInfo) {
+    return []
+  }
+
+  const coder = getCoder()
+  const decoded = coder.decode("UserSubscriptions", accountInfo.data) as any
+  const subscriptions = (decoded.subscriptions ?? []) as any[]
+
+  return subscriptions.map((subscription) => ({
+    id: Number(subscription.id),
+    serviceId: Number(subscription.service_id),
+    monthlyPrice: BigInt(subscription.monthly_price_usdc.toString()),
+    status: mapSubscriptionStatus(subscription.status),
+    startedAt: Number(subscription.started_at),
+    lastPaymentTs: Number(subscription.last_payment_ts),
+    nextBillingTs: Number(subscription.next_billing_ts),
+    pendingUntilTs: Number(subscription.pending_until_ts),
   }))
 }
 
@@ -375,6 +437,63 @@ export async function prepareRegisterPayPalRecipientTransaction(
   return { transaction, blockhash }
 }
 
+export async function prepareSubscribeServiceTransaction(
+  connection: Connection,
+  user: PublicKey,
+  serviceId: number,
+): Promise<{ transaction: Transaction; blockhash: BlockhashWithExpiryBlockHeight }> {
+  if (serviceId < 0) {
+    throw new Error("Invalid service identifier")
+  }
+
+  const [configPda] = PublicKey.findProgramAddressSync([CONFIG_SEED], PROGRAM_ID)
+  const [userPositionPda] = PublicKey.findProgramAddressSync(
+    [USER_POSITION_SEED, user.toBuffer()],
+    PROGRAM_ID,
+  )
+  const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
+    [USER_SUBSCRIPTIONS_SEED, user.toBuffer()],
+    PROGRAM_ID,
+  )
+  const [subscriptionRegistryPda] = PublicKey.findProgramAddressSync(
+    [SUBSCRIPTION_REGISTRY_SEED],
+    PROGRAM_ID,
+  )
+
+  const userPositionInfo = await connection.getAccountInfo(userPositionPda)
+  if (!userPositionInfo) {
+    throw new Error("No staking position found. Stake before subscribing.")
+  }
+
+  const instructionCoder = new BorshInstructionCoder(SUBLY_IDL)
+  const encoded = instructionCoder.encode("subscribe_service", {
+    args: {
+      service_id: new BN(serviceId),
+    },
+  })
+
+  const instruction = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: configPda, isSigner: false, isWritable: true },
+      { pubkey: user, isSigner: true, isWritable: true },
+      { pubkey: userPositionPda, isSigner: false, isWritable: true },
+      { pubkey: userSubscriptionsPda, isSigner: false, isWritable: true },
+      { pubkey: subscriptionRegistryPda, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: encoded,
+  })
+
+  const transaction = new Transaction().add(instruction)
+  transaction.feePayer = user
+
+  const blockhash = await connection.getLatestBlockhash()
+  transaction.recentBlockhash = blockhash.blockhash
+
+  return { transaction, blockhash }
+}
+
 export function parseUsdcAmount(input: string): bigint {
   const value = input.trim()
   if (!/^(\d+)(\.\d{0,6})?$/.test(value)) {
@@ -395,6 +514,18 @@ export function formatUsdcFromSmallest(amount: bigint): string {
   const whole = amount / divisor
   const fraction = amount % divisor
   return `${whole}.${fraction.toString().padStart(USDC_DECIMALS, "0")}`
+}
+
+export function formatUsdcFromSmallestToDisplay(amount: bigint): string {
+  return Number(formatUsdcFromSmallest(amount)).toFixed(2)
+}
+
+export function formatUsdcAmountDisplay(amount: string | number): string {
+  const parsed = typeof amount === "number" ? amount : Number(amount)
+  if (!Number.isFinite(parsed)) {
+    return "0.00"
+  }
+  return parsed.toFixed(2)
 }
 
 export const SUBLY_PROGRAM_ID = PROGRAM_ID

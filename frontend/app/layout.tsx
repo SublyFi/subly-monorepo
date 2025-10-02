@@ -12,7 +12,12 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata = {
   title: "Subly - Subscribe Now, Pay Never",
   description: "PayFi protocol for subscription management with DeFi yield",
-    generator: 'v0.app'
+  generator: "v0.app",
+  icons: {
+    icon: "/subly-logo-color.svg",
+    shortcut: "/subly-logo-color.svg",
+    apple: "/subly-logo-color.svg",
+  },
 }
 
 export default function RootLayout({
