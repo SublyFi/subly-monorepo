@@ -20,6 +20,7 @@ import {
   formatUsdcAmountDisplay,
   formatUsdcFromSmallest,
   prepareSubscribeServiceTransaction,
+  prepareUnsubscribeServiceTransaction,
   type PayPalRecipientDetails,
   type SubscriptionServiceEntry,
   type UserSubscriptionEntry,
@@ -65,6 +66,7 @@ export function SubscriptionInterface() {
   const [userSubscriptions, setUserSubscriptions] = useState<UserSubscriptionEntry[]>([])
   const [hasPayPal, setHasPayPal] = useState(false)
   const [processingServiceId, setProcessingServiceId] = useState<number | null>(null)
+  const [processingUnsubscribeId, setProcessingUnsubscribeId] = useState<number | null>(null)
 
   const { ready, authenticated } = usePrivy()
   const { wallets, ready: walletsReady } = useWallets()
@@ -311,10 +313,78 @@ export function SubscriptionInterface() {
     ],
   )
 
-  const handleUnsubscribe = useCallback((serviceId: number) => {
-    console.log("Unsubscribe flow for service", serviceId)
-    toast.info("Unsubscribe functionality is coming soon.")
-  }, [])
+  const handleUnsubscribe = useCallback(
+    async (subscription: ResolvedSubscriptionCard) => {
+      if (!walletConnected || !activeWallet?.address) {
+        toast.error("Connect a wallet before unsubscribing.")
+        return
+      }
+
+      if (subscription.status !== "ACTIVE") {
+        toast.info("This subscription is not currently active.")
+        return
+      }
+
+      try {
+        setProcessingUnsubscribeId(subscription.subscriptionId)
+        const userPk = new PublicKey(activeWallet.address)
+
+        const { transaction, blockhash } = await prepareUnsubscribeServiceTransaction(
+          connection,
+          userPk,
+          subscription.subscriptionId,
+        )
+
+        const serialized = transaction.serialize({ requireAllSignatures: false })
+        const { signature } = await signAndSendTransaction({
+          transaction: serialized,
+          wallet: activeWallet,
+          chain: "solana:devnet",
+        })
+
+        const signatureString = bs58.encode(signature)
+
+        await connection.confirmTransaction(
+          {
+            signature: signatureString,
+            blockhash: blockhash.blockhash,
+            lastValidBlockHeight: blockhash.lastValidBlockHeight,
+          },
+          "confirmed",
+        )
+
+        toast.success(`Unsubscribe requested for ${subscription.name}`, {
+          description: `${signatureString.slice(0, 8)}…${signatureString.slice(-8)}`,
+          action: {
+            label: "Explorer",
+            onClick: () =>
+              window.open(
+                `https://explorer.solana.com/tx/${signatureString}?cluster=devnet`,
+                "_blank",
+                "noopener,noreferrer",
+              ),
+          },
+        })
+
+        await Promise.all([loadYieldData(), loadUserSubscriptions()])
+      } catch (error) {
+        console.error("Failed to unsubscribe", error)
+        toast.error(
+          error instanceof Error ? error.message : "Unsubscribe failed. Please try again.",
+        )
+      } finally {
+        setProcessingUnsubscribeId(null)
+      }
+    },
+    [
+      activeWallet,
+      connection,
+      loadUserSubscriptions,
+      loadYieldData,
+      signAndSendTransaction,
+      walletConnected,
+    ],
+  )
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-4 sm:px-6 py-6 sm:py-8">
@@ -450,6 +520,9 @@ export function SubscriptionInterface() {
                         ? new Date(subscription.nextBillingTs * 1000).toLocaleDateString()
                         : "Pending"
 
+                    const canUnsubscribe = subscription.status === "ACTIVE"
+                    const busy = processingUnsubscribeId === subscription.subscriptionId
+
                     return (
                       <Card key={subscription.subscriptionId}>
                         <CardContent className="p-4 sm:p-6">
@@ -496,12 +569,18 @@ export function SubscriptionInterface() {
 
                               <Button
                                 variant="destructive"
-                                onClick={() => handleUnsubscribe(subscription.serviceId)}
+                                onClick={() => handleUnsubscribe(subscription)}
                                 size="sm"
                                 className="text-xs sm:text-sm"
-                                disabled
+                                disabled={!canUnsubscribe || busy}
                               >
-                                Unsubscribe
+                                {busy
+                                  ? "Processing…"
+                                  : canUnsubscribe
+                                  ? "Unsubscribe"
+                                  : subscription.status === "PENDING_CANCELLATION"
+                                  ? "Pending"
+                                  : "Cancelled"}
                               </Button>
                             </div>
                           </div>

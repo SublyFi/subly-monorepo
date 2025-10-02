@@ -494,6 +494,50 @@ export async function prepareSubscribeServiceTransaction(
   return { transaction, blockhash }
 }
 
+export async function prepareUnsubscribeServiceTransaction(
+  connection: Connection,
+  user: PublicKey,
+  subscriptionId: number,
+): Promise<{ transaction: Transaction; blockhash: BlockhashWithExpiryBlockHeight }> {
+  if (subscriptionId < 0) {
+    throw new Error("Invalid subscription identifier")
+  }
+
+  const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
+    [USER_SUBSCRIPTIONS_SEED, user.toBuffer()],
+    PROGRAM_ID,
+  )
+
+  const userSubscriptionsInfo = await connection.getAccountInfo(userSubscriptionsPda)
+  if (!userSubscriptionsInfo) {
+    throw new Error("No subscription record found for this wallet")
+  }
+
+  const instructionCoder = new BorshInstructionCoder(SUBLY_IDL)
+  const encoded = instructionCoder.encode("unsubscribe_service", {
+    args: {
+      subscription_id: new BN(subscriptionId),
+    },
+  })
+
+  const instruction = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: user, isSigner: true, isWritable: true },
+      { pubkey: userSubscriptionsPda, isSigner: false, isWritable: true },
+    ],
+    data: encoded,
+  })
+
+  const transaction = new Transaction().add(instruction)
+  transaction.feePayer = user
+
+  const blockhash = await connection.getLatestBlockhash()
+  transaction.recentBlockhash = blockhash.blockhash
+
+  return { transaction, blockhash }
+}
+
 export function parseUsdcAmount(input: string): bigint {
   const value = input.trim()
   if (!/^(\d+)(\.\d{0,6})?$/.test(value)) {
