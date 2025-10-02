@@ -162,34 +162,30 @@ async function handleActivation(
   }
 
   const toNumber = (value: any): number => {
-    if (!value) {
-      return 0;
+    if (value === undefined || value === null) {
+      return 0
     }
     if (typeof value === "number") {
-      return value;
+      return value
     }
     if (typeof value === "bigint") {
-      return Number(value);
+      return Number(value)
     }
     if (typeof value === "string") {
-      return Number(value);
+      return Number(value)
     }
     if (typeof value.toNumber === "function") {
-      return value.toNumber();
+      return value.toNumber()
     }
     if (typeof value.toString === "function") {
-      return Number(value.toString());
+      return Number(value.toString())
     }
-    return Number(value);
-  };
+    return Number(value)
+  }
 
-  const startedAt = toNumber(subscriptionEntry.startedAt ?? subscriptionEntry.started_at);
-  const lastPaymentTs = toNumber(
-    subscriptionEntry.lastPaymentTs ?? subscriptionEntry.last_payment_ts,
-  );
-  const nextBillingTs = toNumber(
-    subscriptionEntry.nextBillingTs ?? subscriptionEntry.next_billing_ts,
-  );
+  const startedAt = toNumber(subscriptionEntry.startedAt)
+  const lastPaymentTs = toNumber(subscriptionEntry.lastPaymentTs)
+  const nextBillingTs = toNumber(subscriptionEntry.nextBillingTs)
 
   const alreadyProcessed =
     lastPaymentTs > startedAt ||
