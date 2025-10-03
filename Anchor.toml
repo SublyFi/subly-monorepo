@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-subly_solana_program = "GJvB3qPb5UmRoWADHWxgwfepEbTbCMwryzWKaBq3Ys22"
+subly_solana_program = "C1gJtFGfd2Tt3omV6eWvezeofymZbp7RYj94Hg4drWq1"
 
 [registry]
 url = "https://api.apr.dev"
@@ -16,6 +16,6 @@ cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 initialize-devnet = "yarn initialize-devnet"
 register-services = "yarn register-subscription-services scripts/subscription-services.json"
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

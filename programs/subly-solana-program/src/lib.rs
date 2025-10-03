@@ -116,7 +116,7 @@ pub mod __client_accounts_unsubscribe_service {
     pub use crate::subly::instructions::unsubscribe_service::__client_accounts_unsubscribe_service::*;
 }
 
-declare_id!("GJvB3qPb5UmRoWADHWxgwfepEbTbCMwryzWKaBq3Ys22");
+declare_id!("C1gJtFGfd2Tt3omV6eWvezeofymZbp7RYj94Hg4drWq1");
 
 #[program]
 pub mod subly_solana_program {

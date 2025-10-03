@@ -21,6 +21,7 @@ pub struct DueSubscriptionInfo {
     pub recipient_type: String,
     pub receiver: String,
     pub due_ts: i64,
+    pub initial_payment_recorded: bool,
 }
 
 #[event]
@@ -85,7 +86,8 @@ pub fn handler(ctx: Context<FindDueSubscriptions>, args: FindDueSubscriptionsArg
             if subscription.status != SubscriptionStatus::Active {
                 continue;
             }
-            if subscription.next_billing_ts > upper_bound {
+            let initial_payment_pending = !subscription.initial_payment_recorded;
+            if !initial_payment_pending && subscription.next_billing_ts > upper_bound {
                 continue;
             }
 
@@ -106,6 +108,7 @@ pub fn handler(ctx: Context<FindDueSubscriptions>, args: FindDueSubscriptionsArg
                 recipient_type: recipient_type.clone(),
                 receiver: receiver.clone(),
                 due_ts: subscription.next_billing_ts,
+                initial_payment_recorded: subscription.initial_payment_recorded,
             });
         }
     }

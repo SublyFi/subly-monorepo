@@ -39,6 +39,7 @@ interface ResolvedSubscriptionCard extends SubscriptionServiceCard {
   subscriptionId: number
   status: "ACTIVE" | "PENDING_CANCELLATION" | "CANCELLED"
   nextBillingTs: number
+  initialPaymentRecorded: boolean
 }
 
 const DEVNET_ENDPOINT =
@@ -217,6 +218,7 @@ export function SubscriptionInterface() {
           price: Number.isFinite(priceNumber) ? priceNumber : 0,
           status: subscription.status,
           nextBillingTs: subscription.nextBillingTs,
+          initialPaymentRecorded: subscription.initialPaymentRecorded,
         }
       })
       .filter(Boolean) as ResolvedSubscriptionCard[]

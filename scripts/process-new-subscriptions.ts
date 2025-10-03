@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
-import { ConfirmOptions, Finality, PublicKey } from "@solana/web3.js";
+import { Finality, PublicKey } from "@solana/web3.js";
 
 import { SublySolanaProgram } from "../target/types/subly_solana_program";
 import {
@@ -11,8 +11,6 @@ import {
 const SEED_CONFIG = "config";
 const SEED_USER_SUBSCRIPTIONS = "user_subscriptions";
 const SEED_REGISTRY = "subscription_registry";
-const BILLING_PERIOD_SECONDS = 30 * 24 * 60 * 60; // must match on-chain constant
-
 const finality: Finality = (process.env.COMMITMENT as Finality) ?? "confirmed";
 const START_SLOT = Number(process.env.NEW_SUBS_START_SLOT ?? 0);
 const FETCH_LIMIT = Number(process.env.NEW_SUBS_FETCH_LIMIT ?? 100);
@@ -161,38 +159,12 @@ async function handleActivation(
     return;
   }
 
-  const toNumber = (value: any): number => {
-    if (value === undefined || value === null) {
-      return 0
-    }
-    if (typeof value === "number") {
-      return value
-    }
-    if (typeof value === "bigint") {
-      return Number(value)
-    }
-    if (typeof value === "string") {
-      return Number(value)
-    }
-    if (typeof value.toNumber === "function") {
-      return value.toNumber()
-    }
-    if (typeof value.toString === "function") {
-      return Number(value.toString())
-    }
-    return Number(value)
-  }
+  const initialPaymentRecorded = Boolean(
+    subscriptionEntry.initial_payment_recorded ?? subscriptionEntry.initialPaymentRecorded,
+  );
 
-  const startedAt = toNumber(subscriptionEntry.startedAt)
-  const lastPaymentTs = toNumber(subscriptionEntry.lastPaymentTs)
-  const nextBillingTs = toNumber(subscriptionEntry.nextBillingTs)
-
-  const alreadyProcessed =
-    lastPaymentTs > startedAt ||
-    nextBillingTs > startedAt + BILLING_PERIOD_SECONDS
-
-  if (alreadyProcessed) {
-    console.log("  -> Initial payout already processed. Skipping duplicate.");
+  if (initialPaymentRecorded) {
+    console.log("  -> Initial payout already recorded on-chain. Skipping duplicate.");
     return;
   }
 

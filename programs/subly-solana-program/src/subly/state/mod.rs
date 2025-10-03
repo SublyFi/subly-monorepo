@@ -407,6 +407,7 @@ pub struct UserSubscription {
     pub next_billing_ts: i64,
     pub pending_until_ts: i64,
     pub status: SubscriptionStatus,
+    pub initial_payment_recorded: bool,
 }
 
 impl UserSubscription {
@@ -417,7 +418,8 @@ impl UserSubscription {
         + 8  // last_payment_ts
         + 8  // next_billing_ts
         + 8  // pending_until_ts
-        + 1; // status
+        + 1  // status
+        + 1; // initial_payment_recorded
 }
 
 #[account]
@@ -530,6 +532,7 @@ impl UserSubscriptions {
             next_billing_ts,
             pending_until_ts: 0,
             status: SubscriptionStatus::Active,
+            initial_payment_recorded: false,
         };
 
         self.subscriptions.push(subscription);
@@ -615,6 +618,12 @@ impl UserSubscriptions {
                 || subscription.status == SubscriptionStatus::PendingCancellation,
             ErrorCode::SubscriptionNotPayable
         );
+
+        if !subscription.initial_payment_recorded {
+            subscription.initial_payment_recorded = true;
+            subscription.last_payment_ts = now;
+            return Ok(subscription.status);
+        }
 
         subscription.last_payment_ts = now;
 

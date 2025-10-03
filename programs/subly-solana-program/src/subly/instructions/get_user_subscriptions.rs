@@ -18,6 +18,7 @@ pub struct UserSubscriptionInfo {
     pub last_payment_ts: i64,
     pub next_billing_ts: i64,
     pub pending_until_ts: i64,
+    pub initial_payment_recorded: bool,
 }
 
 #[event]
@@ -98,6 +99,7 @@ pub fn handler(ctx: Context<GetUserSubscriptions>) -> Result<()> {
             last_payment_ts: subscription.last_payment_ts,
             next_billing_ts: subscription.next_billing_ts,
             pending_until_ts: subscription.pending_until_ts,
+            initial_payment_recorded: subscription.initial_payment_recorded,
         });
     }
 

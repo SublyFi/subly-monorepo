@@ -819,9 +819,43 @@ describe("subly-solana-program", () => {
     expect(activationEvent.receiver).to.eq("91-734-234-1234");
     expect(activationEvent.monthlyPriceUsdc.toString()).to.eq("30000000");
 
-    const lookAheadSeconds = new anchor.BN(40 * 24 * 60 * 60);
+    const subscriptionsAfterFirst: any =
+      await program.account.userSubscriptions.fetch(
+        subscriptionUserSubscriptionsPda
+      );
+    const streamingEntry = subscriptionsAfterFirst.subscriptions.find(
+      (sub: any) => sub.serviceId.toString() === streamingServiceId!.toString()
+    );
+    expect(streamingEntry, "Streaming subscription missing").to.not.eq(undefined);
+    const streamingSubscriptionId = streamingEntry.id.toNumber();
+
+    const initialPaymentSig = await program.methods
+      .recordSubscriptionPayment({
+        subscriptionId: new anchor.BN(streamingSubscriptionId),
+        paymentTs: null,
+      })
+      .accounts({
+        config: configPda,
+        operator: wallet.publicKey,
+        user: subscriptionUser.publicKey,
+        userSubscriptions: subscriptionUserSubscriptionsPda,
+      })
+      .rpc();
+    const initialPaymentEvents = await fetchEventsForSignature(initialPaymentSig);
+    const initialPaymentEvent = initialPaymentEvents.find(
+      (event) => event.name.toLowerCase() === "subscriptionpaymentrecorded"
+    )?.data;
+    expect(initialPaymentEvent, "SubscriptionPaymentRecorded event missing").to.not.eq(
+      undefined
+    );
+    expect(initialPaymentEvent.subscriptionId.toNumber()).to.eq(
+      streamingSubscriptionId
+    );
+    expect(initialPaymentEvent.status).to.eq("ACTIVE");
+
+    const initialLookAheadSeconds = new anchor.BN(40 * 24 * 60 * 60);
     const firstDueSig = await program.methods
-      .findDueSubscriptions({ lookAheadSeconds })
+      .findDueSubscriptions({ lookAheadSeconds: initialLookAheadSeconds })
       .accounts({
         config: configPda,
         subscriptionRegistry: subscriptionRegistryPda,
@@ -848,7 +882,7 @@ describe("subly-solana-program", () => {
     expect(firstDueEntry.monthlyPriceUsdc.toString()).to.eq("30000000");
     expect(firstDueEntry.recipientType).to.eq("PHONE");
     expect(firstDueEntry.receiver).to.eq("91-734-234-1234");
-    const streamingSubscriptionId = firstDueEntry.subscriptionId.toNumber();
+    expect(firstDueEntry.subscriptionId.toNumber()).to.eq(streamingSubscriptionId);
 
     await program.methods
       .subscribeService({ serviceId: new anchor.BN(musicServiceId!) })
@@ -866,7 +900,7 @@ describe("subly-solana-program", () => {
     expect(summaryAfterActive.availableBudget.toString()).to.eq("0");
     expect(summaryAfterActive.availableServiceIds).to.deep.eq([]);
     const secondDueSig = await program.methods
-      .findDueSubscriptions({ lookAheadSeconds })
+      .findDueSubscriptions({ lookAheadSeconds: initialLookAheadSeconds })
       .accounts({
         config: configPda,
         subscriptionRegistry: subscriptionRegistryPda,
@@ -913,8 +947,9 @@ describe("subly-solana-program", () => {
     expect(paymentEvent.subscriptionId.toNumber()).to.eq(streamingSubscriptionId);
     expect(paymentEvent.status).to.eq("ACTIVE");
 
+    const shortLookAheadSeconds = new anchor.BN(10 * 24 * 60 * 60);
     const postPaymentDueSig = await program.methods
-      .findDueSubscriptions({ lookAheadSeconds })
+      .findDueSubscriptions({ lookAheadSeconds: shortLookAheadSeconds })
       .accounts({
         config: configPda,
         subscriptionRegistry: subscriptionRegistryPda,
@@ -978,6 +1013,8 @@ describe("subly-solana-program", () => {
     );
     expect(streamingFromList.serviceName).to.eq("Stream Vault");
     expect(streamingFromList.serviceProvider).to.eq("Vault Media");
+    expect(streamingFromList.initialPaymentRecorded).to.eq(true);
+    expect(streamingFromList.initialPaymentRecorded).to.eq(true);
     expect(streamingFromList.status).to.eq("ACTIVE");
     expect(streamingFromList.monthlyPriceUsdc.toString()).to.eq("30000000");
 

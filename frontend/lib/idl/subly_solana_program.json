@@ -1965,6 +1965,10 @@
           {
             "name": "due_ts",
             "type": "i64"
+          },
+          {
+            "name": "initial_payment_recorded",
+            "type": "bool"
           }
         ]
       }
@@ -2696,6 +2700,10 @@
                 "name": "SubscriptionStatus"
               }
             }
+          },
+          {
+            "name": "initial_payment_recorded",
+            "type": "bool"
           }
         ]
       }
@@ -2752,6 +2760,10 @@
           {
             "name": "pending_until_ts",
             "type": "i64"
+          },
+          {
+            "name": "initial_payment_recorded",
+            "type": "bool"
           }
         ]
       }

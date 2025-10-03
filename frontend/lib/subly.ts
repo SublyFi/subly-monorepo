@@ -193,6 +193,7 @@ export type UserSubscriptionEntry = {
   lastPaymentTs: number
   nextBillingTs: number
   pendingUntilTs: number
+  initialPaymentRecorded: boolean
 }
 
 function mapSubscriptionStatus(raw: any): UserSubscriptionEntry["status"] {
@@ -240,6 +241,9 @@ export async function fetchUserSubscriptions(
     lastPaymentTs: Number(subscription.last_payment_ts),
     nextBillingTs: Number(subscription.next_billing_ts),
     pendingUntilTs: Number(subscription.pending_until_ts),
+    initialPaymentRecorded: Boolean(
+      subscription.initial_payment_recorded ?? subscription.initialPaymentRecorded,
+    ),
   }))
 }
 

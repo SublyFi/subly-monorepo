@@ -276,8 +276,30 @@ export function ProfileInterface() {
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6 mx-4 sm:mx-0">
                 <p className="text-xs sm:text-sm text-blue-800 font-medium">
-                  Please use PayPal Sandbox environment information for testing
+                  Use the PayPal Sandbox environment while testing. If you need credentials, use the test account
+                  below.
                 </p>
+                <ul className="mt-2 text-xs sm:text-sm text-blue-800 space-y-1 list-disc pl-4 text-left">
+                  <li>
+                    <span className="font-semibold">Sandbox:</span>{" "}
+                    <a
+                      className="underline"
+                      href="https://sandbox.paypal.com"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      https://sandbox.paypal.com
+                    </a>
+                  </li>
+                  <li>
+                    <span className="font-semibold">Email:</span>{" "}
+                    sb-sj6a446664523@personal.example.com
+                  </li>
+                  <li>
+                    <span className="font-semibold">Password:</span>{" "}
+                    1d[9mVM-
+                  </li>
+                </ul>
               </div>
               <Button onClick={handleBeginEdit} className="text-sm sm:text-base" disabled={!walletConnected}>
                 Add PayPal Payout
@@ -292,8 +314,30 @@ export function ProfileInterface() {
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
                 <p className="text-xs sm:text-sm text-blue-800 font-medium">
-                  Please enter PayPal Sandbox environment information for testing purposes
+                  Use the PayPal Sandbox environment while testing. If you need credentials, use the test account
+                  below.
                 </p>
+                <ul className="mt-2 text-xs sm:text-sm text-blue-800 space-y-1 list-disc pl-4">
+                  <li>
+                    <span className="font-semibold">Sandbox:</span>{" "}
+                    <a
+                      className="underline"
+                      href="https://sandbox.paypal.com"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      https://sandbox.paypal.com
+                    </a>
+                  </li>
+                  <li>
+                    <span className="font-semibold">Email:</span>{" "}
+                    sb-sj6a446664523@personal.example.com
+                  </li>
+                  <li>
+                    <span className="font-semibold">Password:</span>{" "}
+                    1d[9mVM-
+                  </li>
+                </ul>
               </div>
               <div>
                 <label className="text-sm font-medium">Payout Method</label>
