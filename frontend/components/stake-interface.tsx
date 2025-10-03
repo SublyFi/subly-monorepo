@@ -345,6 +345,20 @@ export function StakeInterface() {
             </TabsList>
 
             <TabsContent value="stake" className="space-y-6 sm:space-y-8 mt-6 sm:mt-8">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <strong className="font-semibold">Reminder:</strong> Staking requires Solana Devnet USDC in your
+                wallet. You can mint test USDC from the Circle faucet at
+                {" "}
+                <a
+                  href="https://faucet.circle.com/"
+                  className="underline font-semibold"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  faucet.circle.com
+                </a>
+                .
+              </div>
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-semibold text-foreground mb-3 block">Amount (USDC)</label>
