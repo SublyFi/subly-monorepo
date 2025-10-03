@@ -159,9 +159,7 @@ async function handleActivation(
     return;
   }
 
-  const initialPaymentRecorded = Boolean(
-    subscriptionEntry.initial_payment_recorded ?? subscriptionEntry.initialPaymentRecorded,
-  );
+  const initialPaymentRecorded = Boolean(subscriptionEntry.initialPaymentRecorded);
 
   if (initialPaymentRecorded) {
     console.log("  -> Initial payout already recorded on-chain. Skipping duplicate.");
