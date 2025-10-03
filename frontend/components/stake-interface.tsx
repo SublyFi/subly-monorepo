@@ -394,18 +394,18 @@ export function StakeInterface() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 sm:gap-3">
-                  {quickAmounts.map((amount) => (
-                    <Button
-                      key={amount}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleQuickStakeAmount(amount)}
-                      className="px-3 sm:px-4 py-2 font-medium text-sm"
-                      disabled={isStaking}
-                    >
-                      ${amount}
-                    </Button>
-                  ))}
+              {quickAmounts.map((amount) => (
+                <Button
+                  key={amount}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleQuickStakeAmount(amount)}
+                  className="px-3 sm:px-4 py-2 font-medium text-sm"
+                  disabled={isStaking}
+                >
+                  {amount} USDC
+                </Button>
+              ))}
                 </div>
               </div>
 
