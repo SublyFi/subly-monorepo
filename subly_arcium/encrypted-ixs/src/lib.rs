@@ -384,6 +384,45 @@ mod circuits {
     }
 
     #[instruction]
+    pub fn fund_rewards_subly(
+        config_ctxt: Enc<Mxe, ConfigSecrets>,
+        amount: u64,
+        now_ts: u64,
+    ) -> (Enc<Mxe, ConfigSecrets>, u8, u64, u64) {
+        let mut config = config_ctxt.to_arcis();
+        let original_config = config;
+
+        let (converted_now, now_ok) = to_i64_checked(now_ts);
+        let mut success = now_ok;
+
+        if success {
+            accrue_config(&mut config, converted_now);
+            if amount == 0 {
+                success = false;
+            } else if config.reward_pool > u64::MAX - amount {
+                success = false;
+            } else {
+                config.reward_pool = config.reward_pool + amount;
+            }
+        }
+
+        if !success {
+            config = original_config;
+        }
+
+        let success_flag: u8 = if success { 1 } else { 0 };
+        let reward_pool_out = if success { config.reward_pool } else { 0u64 };
+        let funded_amount_out = if success { amount } else { 0u64 };
+
+        (
+            config_ctxt.owner.from_arcis(config),
+            success_flag.reveal(),
+            reward_pool_out.reveal(),
+            funded_amount_out.reveal(),
+        )
+    }
+
+    #[instruction]
     pub fn register_paypal_recipient_subly(
         subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
         recipient_type: u8,
@@ -431,7 +470,7 @@ mod circuits {
         let service = service_ctxt.to_arcis();
 
         let (converted_now, now_ok) = to_i64_checked(now_ts);
-        let mut now_i64 = converted_now;
+        let now_i64 = converted_now;
         let (converted_period, period_ok) = to_i64_checked(billing_period_seconds);
         let mut billing_period = converted_period;
 
@@ -578,7 +617,7 @@ mod circuits {
     ) -> (Enc<Mxe, UserSubscriptionsSecrets>, u8, u64, u64, u64, u64) {
         let mut subscriptions = subscriptions_ctxt.to_arcis();
         let (converted_now, now_ok) = to_i64_checked(now_ts);
-        let mut now_i64 = converted_now;
+        let now_i64 = converted_now;
         let (converted_period, period_ok) = to_i64_checked(billing_period_seconds);
         let mut billing_period = converted_period;
 
@@ -670,6 +709,337 @@ mod circuits {
             public_service_id,
             public_monthly_price,
             public_pending_until,
+        )
+    }
+
+    #[instruction]
+    pub fn record_subscription_payment_subly(
+        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
+        subscription_id: u64,
+        paid_ts: u64,
+        billing_period_seconds: u64,
+    ) -> (
+        Enc<Mxe, UserSubscriptionsSecrets>,
+        u8,
+        u64,
+        u64,
+        u64,
+        u8,
+        u64,
+        u8,
+        u64,
+    ) {
+        let mut subscriptions = subscriptions_ctxt.to_arcis();
+
+        let (paid_i64, paid_ok) = to_i64_checked(paid_ts);
+        let (period_i64_raw, period_ok) = to_i64_checked(billing_period_seconds);
+
+        let mut success = paid_ok && period_ok;
+        let mut period_i64 = period_i64_raw;
+        if success {
+            if period_i64 <= 0 {
+                success = false;
+                period_i64 = 0;
+            }
+        } else {
+            period_i64 = 0;
+        }
+
+        if success {
+            if !subscriptions.refresh(paid_i64) {
+                success = false;
+            }
+        } else {
+            let _ = subscriptions.refresh(paid_i64);
+        }
+        let refreshed_state = subscriptions;
+
+        let mut service_id_out = 0u64;
+        let mut monthly_price_out = 0u64;
+        let mut status_code_out: u8 = SUB_STATUS_UNUSED;
+        let mut next_billing_out: u64 = 0;
+        let mut initial_flag_out: u8 = 0;
+
+        if success {
+            let subscription_index = subscriptions.find_subscription_index(subscription_id);
+            if subscription_index == MAX_USER_SUBSCRIPTIONS {
+                success = false;
+            } else {
+                let slot_ref = &mut subscriptions.subscriptions[subscription_index];
+                service_id_out = slot_ref.service_id;
+                monthly_price_out = slot_ref.monthly_price_usdc;
+
+                let status = slot_ref.status;
+                if status != SUB_STATUS_ACTIVE && status != SUB_STATUS_PENDING {
+                    success = false;
+                } else {
+                    if !slot_ref.initial_payment_recorded {
+                        slot_ref.initial_payment_recorded = true;
+                        slot_ref.last_payment_ts = paid_i64;
+                        status_code_out = slot_ref.status;
+                    } else if status == SUB_STATUS_ACTIVE {
+                        slot_ref.last_payment_ts = paid_i64;
+
+                        let next_due = slot_ref.next_billing_ts;
+                        if next_due < 0 {
+                            success = false;
+                        } else {
+                            let (advanced_due, ok) =
+                                advance_due_after(next_due, paid_i64, period_i64);
+                            if ok {
+                                slot_ref.next_billing_ts = advanced_due;
+                                status_code_out = SUB_STATUS_ACTIVE;
+                            } else {
+                                success = false;
+                            }
+                        }
+                    } else {
+                        slot_ref.last_payment_ts = paid_i64;
+                        if subscriptions.total_pending_commitment < slot_ref.monthly_price_usdc {
+                            success = false;
+                        } else {
+                            subscriptions.total_pending_commitment = subscriptions
+                                .total_pending_commitment
+                                - slot_ref.monthly_price_usdc;
+                            slot_ref.status = SUB_STATUS_CANCELLED;
+                            slot_ref.pending_until_ts = 0;
+                            slot_ref.next_billing_ts = 0;
+                            status_code_out = SUB_STATUS_CANCELLED;
+                        }
+                    }
+
+                    if success {
+                        if slot_ref.next_billing_ts >= 0 {
+                            next_billing_out = slot_ref.next_billing_ts as u64;
+                        } else {
+                            next_billing_out = 0;
+                        }
+                        initial_flag_out = if slot_ref.initial_payment_recorded {
+                            1
+                        } else {
+                            0
+                        };
+                    }
+                }
+            }
+        }
+
+        if !success {
+            subscriptions = refreshed_state;
+            service_id_out = 0;
+            monthly_price_out = 0;
+            status_code_out = SUB_STATUS_UNUSED;
+            next_billing_out = 0;
+            initial_flag_out = 0;
+        }
+
+        let success_flag: u8 = if success { 1 } else { 0 };
+        let public_success = success_flag.reveal();
+        let public_subscription_id = subscription_id.reveal();
+        let public_service_id = service_id_out.reveal();
+        let public_monthly_price = monthly_price_out.reveal();
+        let public_status = status_code_out.reveal();
+        let public_next_billing = next_billing_out.reveal();
+        let public_initial_flag = initial_flag_out.reveal();
+
+        let public_paid_ts = paid_ts.reveal();
+
+        (
+            subscriptions_ctxt.owner.from_arcis(subscriptions),
+            public_success,
+            public_subscription_id,
+            public_service_id,
+            public_monthly_price,
+            public_status,
+            public_next_billing,
+            public_initial_flag,
+            public_paid_ts,
+        )
+    }
+
+    #[instruction]
+    pub fn find_due_subscriptions_subly(
+        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
+        now_ts: u64,
+        look_ahead_seconds: u64,
+    ) -> (
+        Enc<Mxe, UserSubscriptionsSecrets>,
+        u8,
+        u8,
+        u64,
+        u64,
+        u64,
+        u64,
+        u8,
+        u64,
+        u64,
+        u64,
+        u64,
+        u8,
+        u64,
+        u64,
+        u64,
+        u64,
+        u8,
+        u64,
+        u64,
+        u64,
+        u64,
+        u8,
+        u8,
+        u128,
+        u128,
+    ) {
+        let mut subscriptions = subscriptions_ctxt.to_arcis();
+
+        let (now_i64, now_ok) = to_i64_checked(now_ts);
+        let (look_i64_raw, look_ok) = to_i64_checked(look_ahead_seconds);
+
+        let mut success = now_ok && look_ok;
+        let mut look_i64 = look_i64_raw;
+        if success {
+            if look_i64 < 0 {
+                success = false;
+                look_i64 = 0;
+            }
+        } else {
+            look_i64 = 0;
+        }
+
+        let mut upper_bound = now_i64;
+        if success {
+            if now_i64 > i64::MAX - look_i64 {
+                success = false;
+            } else {
+                upper_bound = now_i64 + look_i64;
+            }
+        }
+
+        if success {
+            if !subscriptions.refresh(now_i64) {
+                success = false;
+            }
+        } else {
+            let _ = subscriptions.refresh(now_i64);
+        }
+        let refreshed_state = subscriptions;
+
+        let mut due_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
+        let mut due_service_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
+        let mut due_prices = [0u64; MAX_USER_SUBSCRIPTIONS];
+        let mut due_ts_out = [0u64; MAX_USER_SUBSCRIPTIONS];
+        let mut due_initial_flags = [0u8; MAX_USER_SUBSCRIPTIONS];
+        let mut due_count: usize = 0;
+
+        if success && subscriptions.paypal_configured {
+            for idx in 0..MAX_USER_SUBSCRIPTIONS {
+                let slot = subscriptions.subscriptions[idx];
+                let can_collect = due_count < MAX_USER_SUBSCRIPTIONS;
+                if can_collect {
+                    let is_active = slot.status == SUB_STATUS_ACTIVE;
+                    let mut is_due = 0u8;
+                    if is_active {
+                        if !slot.initial_payment_recorded {
+                            is_due = 1;
+                        } else if slot.next_billing_ts <= upper_bound {
+                            is_due = 1;
+                        }
+                    }
+                    if is_due == 1 {
+                        due_ids[due_count] = slot.id;
+                        due_service_ids[due_count] = slot.service_id;
+                        due_prices[due_count] = slot.monthly_price_usdc;
+                        if slot.next_billing_ts >= 0 {
+                            due_ts_out[due_count] = slot.next_billing_ts as u64;
+                        } else {
+                            due_ts_out[due_count] = 0;
+                        }
+                        due_initial_flags[due_count] =
+                            if slot.initial_payment_recorded { 1 } else { 0 };
+                        due_count = due_count + 1;
+                    }
+                }
+            }
+        }
+
+        if !success {
+            subscriptions = refreshed_state;
+            due_count = 0;
+            due_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
+            due_service_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
+            due_prices = [0u64; MAX_USER_SUBSCRIPTIONS];
+            due_ts_out = [0u64; MAX_USER_SUBSCRIPTIONS];
+            due_initial_flags = [0u8; MAX_USER_SUBSCRIPTIONS];
+        }
+
+        let success_flag: u8 = if success { 1 } else { 0 };
+        let public_success = success_flag.reveal();
+        let due_count_u8: u8 = if due_count > MAX_USER_SUBSCRIPTIONS {
+            MAX_USER_SUBSCRIPTIONS as u8
+        } else {
+            due_count as u8
+        };
+        let public_due_count = due_count_u8.reveal();
+
+        let public_sub_id_0 = due_ids[0].reveal();
+        let public_service_id_0 = due_service_ids[0].reveal();
+        let public_price_0 = due_prices[0].reveal();
+        let public_due_ts_0 = due_ts_out[0].reveal();
+        let public_initial_0 = due_initial_flags[0].reveal();
+
+        let public_sub_id_1 = due_ids[1].reveal();
+        let public_service_id_1 = due_service_ids[1].reveal();
+        let public_price_1 = due_prices[1].reveal();
+        let public_due_ts_1 = due_ts_out[1].reveal();
+        let public_initial_1 = due_initial_flags[1].reveal();
+
+        let public_sub_id_2 = due_ids[2].reveal();
+        let public_service_id_2 = due_service_ids[2].reveal();
+        let public_price_2 = due_prices[2].reveal();
+        let public_due_ts_2 = due_ts_out[2].reveal();
+        let public_initial_2 = due_initial_flags[2].reveal();
+
+        let public_sub_id_3 = due_ids[3].reveal();
+        let public_service_id_3 = due_service_ids[3].reveal();
+        let public_price_3 = due_prices[3].reveal();
+        let public_due_ts_3 = due_ts_out[3].reveal();
+        let public_initial_3 = due_initial_flags[3].reveal();
+
+        let recipient_type_out = subscriptions.paypal_recipient_type;
+        let receiver_hash_low_out = subscriptions.paypal_receiver_hash_low;
+        let receiver_hash_high_out = subscriptions.paypal_receiver_hash_high;
+
+        let public_recipient_type = recipient_type_out.reveal();
+        let public_receiver_hash_low = receiver_hash_low_out.reveal();
+        let public_receiver_hash_high = receiver_hash_high_out.reveal();
+
+        (
+            subscriptions_ctxt.owner.from_arcis(subscriptions),
+            public_success,
+            public_due_count,
+            public_sub_id_0,
+            public_service_id_0,
+            public_price_0,
+            public_due_ts_0,
+            public_initial_0,
+            public_sub_id_1,
+            public_service_id_1,
+            public_price_1,
+            public_due_ts_1,
+            public_initial_1,
+            public_sub_id_2,
+            public_service_id_2,
+            public_price_2,
+            public_due_ts_2,
+            public_initial_2,
+            public_sub_id_3,
+            public_service_id_3,
+            public_price_3,
+            public_due_ts_3,
+            public_initial_3,
+            public_recipient_type,
+            public_receiver_hash_low,
+            public_receiver_hash_high,
         )
     }
 
@@ -847,6 +1217,234 @@ mod circuits {
             public_tranche_count,
             public_last_updated,
         )
+    }
+
+    #[instruction]
+    pub fn claim_user_subly(
+        config_ctxt: Enc<Mxe, ConfigSecrets>,
+        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
+        requested_amount: u64,
+        now_ts: u64,
+    ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, UserStakeSecrets>, u8, u64) {
+        let mut config = config_ctxt.to_arcis();
+        let mut stake = stake_ctxt.to_arcis();
+        let original_config = config;
+        let original_stake = stake;
+
+        let (now_i64, now_ok) = to_i64_checked(now_ts);
+        let mut success = now_ok;
+        let mut claimed_amount: u64 = 0;
+
+        if success {
+            accrue_config(&mut config, now_i64);
+            sync_entries(&mut stake, config.acc_index, now_i64);
+
+            let mut available_acc: u128 = 0;
+            let active_count = stake.entry_count as usize;
+            for idx in 0..MAX_STAKE_ENTRIES {
+                if idx < active_count {
+                    let entry = stake.entries[idx];
+                    if now_i64 >= entry.lock_end_ts {
+                        available_acc = available_acc + entry.unrealized_yield as u128;
+                    }
+                }
+            }
+
+            if available_acc > u64::MAX as u128 {
+                success = false;
+            } else {
+                let available = available_acc as u64;
+                let mut desired = requested_amount;
+                if desired == 0 {
+                    desired = available;
+                } else if desired > available {
+                    desired = available;
+                }
+
+                if desired == 0 {
+                    success = false;
+                } else if config.reward_pool < desired {
+                    success = false;
+                } else {
+                    let mut remaining = desired;
+                    let mut overflow = false;
+                    for idx in 0..MAX_STAKE_ENTRIES {
+                        if idx < active_count && remaining > 0 {
+                            let entry = &mut stake.entries[idx];
+                            if now_i64 >= entry.lock_end_ts {
+                                let available_entry = entry.unrealized_yield;
+                                let take = if available_entry > remaining {
+                                    remaining
+                                } else {
+                                    available_entry
+                                };
+                                if take > 0 {
+                                    entry.unrealized_yield = entry.unrealized_yield - take;
+                                    if entry.claimed_user > u64::MAX - take {
+                                        overflow = true;
+                                    } else {
+                                        entry.claimed_user = entry.claimed_user + take;
+                                        remaining = remaining - take;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if overflow || remaining > 0 {
+                        success = false;
+                    } else {
+                        config.reward_pool = config.reward_pool - desired;
+                        claimed_amount = desired;
+                    }
+                }
+            }
+        }
+
+        if !success {
+            config = original_config;
+            stake = original_stake;
+            claimed_amount = 0;
+        }
+
+        let success_flag: u8 = if success { 1 } else { 0 };
+
+        (
+            config_ctxt.owner.from_arcis(config),
+            stake_ctxt.owner.from_arcis(stake),
+            success_flag.reveal(),
+            claimed_amount.reveal(),
+        )
+    }
+
+    #[instruction]
+    pub fn claim_operator_subly(
+        config_ctxt: Enc<Mxe, ConfigSecrets>,
+        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
+        requested_amount: u64,
+        now_ts: u64,
+    ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, UserStakeSecrets>, u8, u64) {
+        let mut config = config_ctxt.to_arcis();
+        let mut stake = stake_ctxt.to_arcis();
+        let original_config = config;
+        let original_stake = stake;
+
+        let (now_i64, now_ok) = to_i64_checked(now_ts);
+        let mut success = now_ok;
+        let mut claimed_amount: u64 = 0;
+
+        if success {
+            accrue_config(&mut config, now_i64);
+            sync_entries(&mut stake, config.acc_index, now_i64);
+
+            let mut available_acc: u128 = 0;
+            let active_count = stake.entry_count as usize;
+            for idx in 0..MAX_STAKE_ENTRIES {
+                if idx < active_count {
+                    let entry = stake.entries[idx];
+                    available_acc = available_acc + entry.unrealized_yield as u128;
+                }
+            }
+
+            if available_acc > u64::MAX as u128 {
+                success = false;
+            } else {
+                let available = available_acc as u64;
+                let mut desired = requested_amount;
+                if desired == 0 {
+                    desired = available;
+                } else if desired > available {
+                    desired = available;
+                }
+
+                if desired == 0 {
+                    success = false;
+                } else if config.reward_pool < desired {
+                    success = false;
+                } else {
+                    let mut remaining = desired;
+                    let mut overflow = false;
+                    for idx in 0..MAX_STAKE_ENTRIES {
+                        if idx < active_count && remaining > 0 {
+                            let entry = &mut stake.entries[idx];
+                            let available_entry = entry.unrealized_yield;
+                            let take = if available_entry > remaining {
+                                remaining
+                            } else {
+                                available_entry
+                            };
+                            if take > 0 {
+                                entry.unrealized_yield = entry.unrealized_yield - take;
+                                if entry.claimed_operator > u64::MAX - take {
+                                    overflow = true;
+                                } else {
+                                    entry.claimed_operator = entry.claimed_operator + take;
+                                    remaining = remaining - take;
+                                }
+                            }
+                        }
+                    }
+
+                    if overflow || remaining > 0 {
+                        success = false;
+                    } else {
+                        config.reward_pool = config.reward_pool - desired;
+                        claimed_amount = desired;
+                    }
+                }
+            }
+        }
+
+        if !success {
+            config = original_config;
+            stake = original_stake;
+            claimed_amount = 0;
+        }
+
+        let success_flag: u8 = if success { 1 } else { 0 };
+
+        (
+            config_ctxt.owner.from_arcis(config),
+            stake_ctxt.owner.from_arcis(stake),
+            success_flag.reveal(),
+            claimed_amount.reveal(),
+        )
+    }
+
+    fn advance_due_after(current_due: i64, paid_ts: i64, period: i64) -> (i64, bool) {
+        let mut success = true;
+        let mut output_due = 0i64;
+
+        if period <= 0 || current_due < 0 {
+            success = false;
+        } else if current_due > paid_ts {
+            output_due = current_due;
+        } else {
+            let diff = paid_ts - current_due;
+            let period_u128 = period as u128;
+            if period_u128 == 0 {
+                success = false;
+            } else {
+                let diff_u128 = diff as u128;
+                let increments_u128 = diff_u128 / period_u128 + 1;
+                let increments_i128 = increments_u128 as i128;
+                let period_i128 = period as i128;
+                let current_i128 = current_due as i128;
+                let added = increments_i128 * period_i128;
+                let candidate = current_i128 + added;
+                if candidate > i64::MAX as i128 {
+                    success = false;
+                } else {
+                    output_due = candidate as i64;
+                }
+            }
+        }
+
+        if success {
+            (output_due, true)
+        } else {
+            (0, false)
+        }
     }
 
     fn to_i64_checked(value: u64) -> (i64, bool) {
