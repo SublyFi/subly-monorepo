@@ -1,0 +1,10 @@
+[localnet]
+# Number of MPC nodes to run when using `arcium localnet`
+nodes = 2
+# Seconds to wait for the localnet cluster to become ready
+localnet_timeout_secs = 60
+# MPC backends supported by this project.
+# Supported values: "Cerberus", "Manticore"
+backends = ["Cerberus"]
+# When using Manticore you must provide per-node dataset folders.
+# manticore_data_folders = ["./data/player-0", "./data/player-1"]
