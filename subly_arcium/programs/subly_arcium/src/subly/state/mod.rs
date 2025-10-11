@@ -1,9 +1,13 @@
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::MXEEncryptedStruct;
 
+use crate::subly::error::ErrorCode;
+
 pub const CONFIG_CT_LEN: usize = 6;
-pub const REGISTRY_CT_LEN: usize = 3;
+pub const REGISTRY_CT_LEN: usize = 4;
 pub const USER_STAKE_CT_LEN: usize = 164;
+pub const USER_SUBSCRIPTIONS_CT_LEN: usize = 43;
+pub const SUBSCRIPTION_SERVICE_CT_LEN: usize = 13;
 
 const fn encrypted_block_len(ciphertexts: usize) -> usize {
     16 + (ciphertexts * 32)
@@ -83,18 +87,28 @@ impl SublyConfig {
 
 #[account]
 pub struct SubscriptionRegistry {
+    pub next_service_id: u64,
+    pub service_count: u32,
     pub encrypted_registry: EncryptedState<REGISTRY_CT_LEN>,
+    pub pending_computation_offset: Option<u64>,
     pub bump: u8,
 }
 
 impl SubscriptionRegistry {
     pub const LEN: usize = 8 // discriminator
+        + 8  // next_service_id
+        + 4  // service_count
         + encrypted_block_len(REGISTRY_CT_LEN)
+        + 1  // option tag
+        + 8  // pending computation offset
         + 1; // bump
 
     pub fn blank_state() -> EncryptedState<REGISTRY_CT_LEN> {
         EncryptedState::blank()
     }
+
+    pub const ENCRYPTED_STATE_OFFSET: usize = 8 + 8 + 4;
+    pub const ENCRYPTED_STATE_LEN: usize = encrypted_block_len(REGISTRY_CT_LEN);
 }
 
 #[account]
@@ -131,4 +145,108 @@ impl UserStakeAccount {
 
     pub const ENCRYPTED_STATE_OFFSET: usize = 8 + 32 + 1;
     pub const ENCRYPTED_STATE_LEN: usize = encrypted_block_len(USER_STAKE_CT_LEN);
+}
+
+#[account]
+pub struct UserSubscriptionsAccount {
+    pub owner: Pubkey,
+    pub encrypted_state: EncryptedState<USER_SUBSCRIPTIONS_CT_LEN>,
+    pub pending_computation_offset: Option<u64>,
+    pub bump: u8,
+}
+
+impl UserSubscriptionsAccount {
+    pub const LEN: usize = 8 // discriminator
+        + 32 // owner
+        + encrypted_block_len(USER_SUBSCRIPTIONS_CT_LEN)
+        + 1  // pending computation option tag
+        + 8  // pending computation value
+        + 1; // bump
+
+    pub fn blank_state() -> EncryptedState<USER_SUBSCRIPTIONS_CT_LEN> {
+        EncryptedState::blank()
+    }
+
+    pub fn ensure_owner(&mut self, owner: Pubkey, bump: u8) {
+        if self.owner == Pubkey::default() {
+            self.owner = owner;
+            self.pending_computation_offset = None;
+            self.encrypted_state = Self::blank_state();
+            self.bump = bump;
+        }
+    }
+
+    pub const ENCRYPTED_STATE_OFFSET: usize = 8 + 32;
+    pub const ENCRYPTED_STATE_LEN: usize = encrypted_block_len(USER_SUBSCRIPTIONS_CT_LEN);
+}
+
+#[account]
+pub struct SubscriptionServiceAccount {
+    pub id: u64,
+    pub creator: Pubkey,
+    pub encrypted_state: EncryptedState<SUBSCRIPTION_SERVICE_CT_LEN>,
+    pub bump: u8,
+}
+
+impl SubscriptionServiceAccount {
+    pub const LEN: usize = 8 // discriminator
+        + 8  // id
+        + 32 // creator
+        + encrypted_block_len(SUBSCRIPTION_SERVICE_CT_LEN)
+        + 1; // bump
+
+    pub fn blank_state() -> EncryptedState<SUBSCRIPTION_SERVICE_CT_LEN> {
+        EncryptedState::blank()
+    }
+
+    pub const ENCRYPTED_STATE_OFFSET: usize = 8 + 8 + 32;
+    pub const ENCRYPTED_STATE_LEN: usize = encrypted_block_len(SUBSCRIPTION_SERVICE_CT_LEN);
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PayPalRecipientType {
+    Email,
+    PayPalId,
+    Phone,
+    UserHandle,
+}
+
+impl PayPalRecipientType {
+    pub fn from_str(value: &str) -> Result<Self> {
+        match value.trim().to_ascii_uppercase().as_str() {
+            "EMAIL" => Ok(Self::Email),
+            "PAYPAL_ID" => Ok(Self::PayPalId),
+            "PHONE" => Ok(Self::Phone),
+            "USER_HANDLE" => Ok(Self::UserHandle),
+            _ => Err(ErrorCode::InvalidPayPalRecipientType.into()),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Email => "EMAIL",
+            Self::PayPalId => "PAYPAL_ID",
+            Self::Phone => "PHONE",
+            Self::UserHandle => "USER_HANDLE",
+        }
+    }
+
+    pub fn as_index(&self) -> u8 {
+        match self {
+            Self::Email => 0,
+            Self::PayPalId => 1,
+            Self::Phone => 2,
+            Self::UserHandle => 3,
+        }
+    }
+
+    pub fn from_index(index: u8) -> Option<Self> {
+        match index {
+            0 => Some(Self::Email),
+            1 => Some(Self::PayPalId),
+            2 => Some(Self::Phone),
+            3 => Some(Self::UserHandle),
+            _ => None,
+        }
+    }
 }

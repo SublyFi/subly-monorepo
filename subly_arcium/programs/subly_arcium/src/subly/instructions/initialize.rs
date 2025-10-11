@@ -7,8 +7,7 @@ use crate::subly::{
     state::{EncryptedState, SublyConfig, SubscriptionRegistry},
 };
 use crate::{
-    Initialize, InitializeSublyCallback, InitializeSublyOutput,
-    InitializeSublyOutputStruct0,
+    Initialize, InitializeSublyCallback, InitializeSublyOutput, InitializeSublyOutputStruct0,
 };
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
@@ -39,7 +38,10 @@ pub fn handler(
     config.vault_bump = ctx.bumps.vault;
 
     let registry = &mut ctx.accounts.subscription_registry;
+    registry.next_service_id = 0;
+    registry.service_count = 0;
     registry.encrypted_registry = SubscriptionRegistry::blank_state();
+    registry.pending_computation_offset = None;
     registry.bump = ctx.bumps.subscription_registry;
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;

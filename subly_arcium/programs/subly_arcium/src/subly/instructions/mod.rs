@@ -1,3 +1,8 @@
 pub mod initialize;
+pub mod register_paypal_recipient;
+pub mod register_subscription_service;
 pub mod stake;
+pub mod subscribe_service;
+pub mod sync_yield;
 pub mod unstake;
+pub mod unsubscribe_service;
