@@ -1,8 +1,8 @@
-import * as anchor from "@coral-xyz/anchor";
-import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
+import anchor from "@coral-xyz/anchor";
+import type { Program } from "@coral-xyz/anchor";
 import { ConfirmOptions, PublicKey } from "@solana/web3.js";
 
-import { SublySolanaProgram } from "../target/types/subly_solana_program";
+import type { SublySolanaProgram } from "../programs/subly-solana-program/types/subly_solana_program";
 import {
   PayPalClient,
   buildDueEntryPayload,
@@ -17,34 +17,39 @@ const SEED_CONFIG = "config";
 const SEED_REGISTRY = "subscription_registry";
 const SEED_USER_SUBSCRIPTIONS = "user_subscriptions";
 
-const commitment: ConfirmOptions["commitment"] = (process.env.COMMITMENT as ConfirmOptions["commitment"]) ?? "confirmed";
-const LOOK_AHEAD_SECONDS = Number(process.env.LOOK_AHEAD_SECONDS ?? DEFAULT_LOOK_AHEAD_SECONDS);
+const commitment: ConfirmOptions["commitment"] =
+  (process.env.COMMITMENT as ConfirmOptions["commitment"]) ?? "confirmed";
+const LOOK_AHEAD_SECONDS = Number(
+  process.env.LOOK_AHEAD_SECONDS ?? DEFAULT_LOOK_AHEAD_SECONDS
+);
 const CHUNK_SIZE = Number(process.env.BATCH_SIZE ?? DEFAULT_CHUNK_SIZE);
 const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID;
 const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET;
-const PAYPAL_API_BASE = process.env.PAYPAL_API_BASE ?? "https://api-m.sandbox.paypal.com";
+const PAYPAL_API_BASE =
+  process.env.PAYPAL_API_BASE ?? "https://api-m.sandbox.paypal.com";
 
 async function main() {
-  const provider = AnchorProvider.env();
+  const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const wallet = provider.wallet as anchor.Wallet;
 
-  const program = anchor.workspace.SublySolanaProgram as Program<SublySolanaProgram>;
+  const program = anchor.workspace
+    .SublySolanaProgram as Program<SublySolanaProgram>;
 
   const [configPda] = PublicKey.findProgramAddressSync(
     [Buffer.from(SEED_CONFIG)],
-    program.programId,
+    program.programId
   );
   const [registryPda] = PublicKey.findProgramAddressSync(
     [Buffer.from(SEED_REGISTRY)],
-    program.programId,
+    program.programId
   );
 
   const config = await program.account.sublyConfig.fetch(configPda);
   if (!config.authority.equals(wallet.publicKey)) {
     throw new Error(
       `Wallet ${wallet.publicKey.toBase58()} is not the configured authority (${config.authority.toBase58()}). ` +
-        "Use the config authority wallet to run the batch.",
+        "Use the config authority wallet to run the batch."
     );
   }
 
@@ -55,7 +60,7 @@ async function main() {
   }
 
   console.log(
-    `Scanning ${allUserSubscriptions.length} user subscription accounts with look-ahead ${LOOK_AHEAD_SECONDS} seconds...`,
+    `Scanning ${allUserSubscriptions.length} user subscription accounts with look-ahead ${LOOK_AHEAD_SECONDS} seconds...`
   );
 
   const eventCoder = new anchor.BorshEventCoder(program.idl);
@@ -65,7 +70,10 @@ async function main() {
     clientSecret: PAYPAL_CLIENT_SECRET,
   });
 
-  const chunks = chunkAccounts(allUserSubscriptions.map((account) => account.publicKey), CHUNK_SIZE);
+  const chunks = chunkAccounts(
+    allUserSubscriptions.map((account) => account.publicKey),
+    CHUNK_SIZE
+  );
   for (const batch of chunks) {
     const remainingAccounts = batch.map((pda) => ({
       pubkey: pda,
@@ -74,7 +82,9 @@ async function main() {
     }));
 
     const signature = await program.methods
-      .findDueSubscriptions({ lookAheadSeconds: new BN(LOOK_AHEAD_SECONDS) })
+      .findDueSubscriptions({
+        lookAheadSeconds: new anchor.BN(LOOK_AHEAD_SECONDS),
+      })
       .accounts({
         config: configPda,
         subscriptionRegistry: registryPda,
@@ -83,12 +93,16 @@ async function main() {
       .rpc({ commitment });
 
     const events = await decodeEvents(provider, eventCoder, signature);
-    const dueEvent = events.find((event) => event.name.toLowerCase() === "subscriptionsdue");
+    const dueEvent = events.find(
+      (event) => event.name.toLowerCase() === "subscriptionsdue"
+    );
     if (!dueEvent || dueEvent.data.entries.length === 0) {
       continue;
     }
 
-    console.log(`Found ${dueEvent.data.entries.length} subscriptions due in tx ${signature}`);
+    console.log(
+      `Found ${dueEvent.data.entries.length} subscriptions due in tx ${signature}`
+    );
 
     for (const rawEntry of dueEvent.data.entries as Array<DueEntryRaw>) {
       await handleDueEntry(program, configPda, payPalClient, rawEntry);
@@ -100,24 +114,24 @@ async function main() {
 
 type DueEntryRaw = {
   user: PublicKey;
-  subscriptionId: BN;
-  serviceId: BN;
+  subscriptionId: anchor.BN;
+  serviceId: anchor.BN;
   serviceName: string;
-  monthlyPriceUsdc: BN;
+  monthlyPriceUsdc: anchor.BN;
   recipientType: string;
   receiver: string;
-  dueTs: BN;
+  dueTs: anchor.BN;
 };
 
 async function handleDueEntry(
   program: Program<SublySolanaProgram>,
   configPda: PublicKey,
   payPalClient: PayPalClient,
-  entry: DueEntryRaw,
+  entry: DueEntryRaw
 ) {
   console.log(
     `\nProcessing subscription ${entry.subscriptionId.toNumber()} for user ${entry.user.toBase58()} ` +
-      `(${entry.serviceName}) due at ${entry.dueTs.toNumber()}`,
+      `(${entry.serviceName}) due at ${entry.dueTs.toNumber()}`
   );
 
   await payPalClient.createPayout(
@@ -127,12 +141,12 @@ async function handleDueEntry(
       monthlyPriceUsdc: entry.monthlyPriceUsdc,
       serviceName: entry.serviceName,
       subscriptionId: entry.subscriptionId,
-    }),
+    })
   );
 
   const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
     [Buffer.from(SEED_USER_SUBSCRIPTIONS), entry.user.toBuffer()],
-    program.programId,
+    program.programId
   );
 
   const signature = await program.methods
@@ -152,9 +166,9 @@ async function handleDueEntry(
 }
 
 async function decodeEvents(
-  provider: AnchorProvider,
+  provider: anchor.AnchorProvider,
   eventCoder: anchor.BorshEventCoder,
-  signature: string,
+  signature: string
 ) {
   let attempts = 0;
   let tx = null;
@@ -187,7 +201,10 @@ async function decodeEvents(
   return events;
 }
 
-function chunkAccounts(accounts: PublicKey[], chunkSize: number): PublicKey[][] {
+function chunkAccounts(
+  accounts: PublicKey[],
+  chunkSize: number
+): PublicKey[][] {
   const chunks: PublicKey[][] = [];
   for (let i = 0; i < accounts.length; i += chunkSize) {
     chunks.push(accounts.slice(i, i + chunkSize));

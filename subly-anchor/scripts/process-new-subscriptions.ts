@@ -1,12 +1,9 @@
-import * as anchor from "@coral-xyz/anchor";
-import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
+import anchor from "@coral-xyz/anchor";
+import type { Program } from "@coral-xyz/anchor";
 import { Finality, PublicKey } from "@solana/web3.js";
 
-import { SublySolanaProgram } from "../target/types/subly_solana_program";
-import {
-  PayPalClient,
-  buildDueEntryPayload,
-} from "./paypal-client";
+import type { SublySolanaProgram } from "../programs/subly-solana-program/types/subly_solana_program";
+import { PayPalClient, buildDueEntryPayload } from "./paypal-client";
 
 const SEED_CONFIG = "config";
 const SEED_USER_SUBSCRIPTIONS = "user_subscriptions";
@@ -17,29 +14,31 @@ const FETCH_LIMIT = Number(process.env.NEW_SUBS_FETCH_LIMIT ?? 100);
 const MAX_TRANSACTIONS = Number(process.env.NEW_SUBS_MAX_TX ?? 1000);
 const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID;
 const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET;
-const PAYPAL_API_BASE = process.env.PAYPAL_API_BASE ?? "https://api-m.sandbox.paypal.com";
+const PAYPAL_API_BASE =
+  process.env.PAYPAL_API_BASE ?? "https://api-m.sandbox.paypal.com";
 
 async function main() {
-  const provider = AnchorProvider.env();
+  const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   const wallet = provider.wallet as anchor.Wallet;
-  const program = anchor.workspace.SublySolanaProgram as Program<SublySolanaProgram>;
+  const program = anchor.workspace
+    .SublySolanaProgram as Program<SublySolanaProgram>;
 
   const [configPda] = PublicKey.findProgramAddressSync(
     [Buffer.from(SEED_CONFIG)],
-    program.programId,
+    program.programId
   );
   const [registryPda] = PublicKey.findProgramAddressSync(
     [Buffer.from(SEED_REGISTRY)],
-    program.programId,
+    program.programId
   );
 
   const config = await program.account.sublyConfig.fetch(configPda);
   if (!config.authority.equals(wallet.publicKey)) {
     throw new Error(
       `Wallet ${wallet.publicKey.toBase58()} is not the configured authority (${config.authority.toBase58()}). ` +
-        "Use the config authority wallet to run the batch.",
+        "Use the config authority wallet to run the batch."
     );
   }
 
@@ -50,7 +49,9 @@ async function main() {
     clientSecret: PAYPAL_CLIENT_SECRET,
   });
 
-  const registry = await program.account.subscriptionRegistry.fetch(registryPda);
+  const registry = await program.account.subscriptionRegistry.fetch(
+    registryPda
+  );
   const serviceNameById = new Map<number, string>();
   registry.services.forEach((service) => {
     serviceNameById.set(service.id.toNumber(), service.name);
@@ -64,7 +65,7 @@ async function main() {
     const signatures = await provider.connection.getSignaturesForAddress(
       program.programId,
       { before, limit: FETCH_LIMIT },
-      finality,
+      finality
     );
 
     if (signatures.length === 0) {
@@ -83,7 +84,7 @@ async function main() {
 
       const events = await decodeEvents(provider, eventCoder, info.signature);
       const activations = events.filter(
-        (event) => event.name.toLowerCase() === "subscriptionactivated",
+        (event) => event.name.toLowerCase() === "subscriptionactivated"
       );
       if (activations.length === 0) {
         continue;
@@ -96,7 +97,7 @@ async function main() {
           payPalClient,
           serviceNameById,
           evt.data,
-          info.signature,
+          info.signature
         );
       }
 
@@ -107,14 +108,16 @@ async function main() {
     }
   }
 
-  console.log(`Processed ${processed} transactions for SubscriptionActivated events.`);
+  console.log(
+    `Processed ${processed} transactions for SubscriptionActivated events.`
+  );
 }
 
 type ActivationEvent = {
   user: PublicKey;
-  subscriptionId: BN;
-  serviceId: BN;
-  monthlyPriceUsdc: BN;
+  subscriptionId: anchor.BN;
+  serviceId: anchor.BN;
+  monthlyPriceUsdc: anchor.BN;
   recipientType: string;
   receiver: string;
 };
@@ -125,44 +128,50 @@ async function handleActivation(
   payPalClient: PayPalClient,
   serviceNameById: Map<number, string>,
   activation: ActivationEvent,
-  signature: string,
+  signature: string
 ) {
   console.log(
-    `\nPayout for new subscription ${activation.subscriptionId.toNumber()} to user ${activation.user.toBase58()} (tx ${signature})`,
+    `\nPayout for new subscription ${activation.subscriptionId.toNumber()} to user ${activation.user.toBase58()} (tx ${signature})`
   );
 
   const serviceIdNum = activation.serviceId.toNumber();
-  const serviceName = serviceNameById.get(serviceIdNum) ?? `service-${serviceIdNum}`;
+  const serviceName =
+    serviceNameById.get(serviceIdNum) ?? `service-${serviceIdNum}`;
 
   const [userSubscriptionsPda] = PublicKey.findProgramAddressSync(
     [Buffer.from(SEED_USER_SUBSCRIPTIONS), activation.user.toBuffer()],
-    program.programId,
+    program.programId
   );
 
-  const userSubscriptionsAccount = await program.account.userSubscriptions.fetchNullable(
-    userSubscriptionsPda,
-  );
+  const userSubscriptionsAccount =
+    await program.account.userSubscriptions.fetchNullable(userSubscriptionsPda);
   if (!userSubscriptionsAccount) {
     console.warn("  -> User subscriptions account not found. Skipping payout.");
     return;
   }
 
-  const subscriptionEntry = userSubscriptionsAccount.subscriptions.find((subscription: any) => {
-    if (subscription.id?.eq) {
-      return subscription.id.eq(activation.subscriptionId);
+  const subscriptionEntry = userSubscriptionsAccount.subscriptions.find(
+    (subscription: any) => {
+      if (subscription.id?.eq) {
+        return subscription.id.eq(activation.subscriptionId);
+      }
+      return Number(subscription.id) === activation.subscriptionId.toNumber();
     }
-    return Number(subscription.id) === activation.subscriptionId.toNumber();
-  });
+  );
 
   if (!subscriptionEntry) {
     console.warn("  -> Subscription entry not found in PDA. Skipping payout.");
     return;
   }
 
-  const initialPaymentRecorded = Boolean(subscriptionEntry.initialPaymentRecorded);
+  const initialPaymentRecorded = Boolean(
+    subscriptionEntry.initialPaymentRecorded
+  );
 
   if (initialPaymentRecorded) {
-    console.log("  -> Initial payout already recorded on-chain. Skipping duplicate.");
+    console.log(
+      "  -> Initial payout already recorded on-chain. Skipping duplicate."
+    );
     return;
   }
 
@@ -173,7 +182,7 @@ async function handleActivation(
       monthlyPriceUsdc: activation.monthlyPriceUsdc,
       serviceName,
       subscriptionId: activation.subscriptionId,
-    }),
+    })
   );
 
   const paymentSig = await program.methods
@@ -193,9 +202,9 @@ async function handleActivation(
 }
 
 async function decodeEvents(
-  provider: AnchorProvider,
+  provider: anchor.AnchorProvider,
   eventCoder: anchor.BorshEventCoder,
-  signature: string,
+  signature: string
 ) {
   let attempts = 0;
   let tx = null;

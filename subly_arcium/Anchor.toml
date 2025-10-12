@@ -17,3 +17,192 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+[test.validator]
+[[test.genesis]]
+address = "BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6"
+program = "/Users/yukikimura/work/cypherpank/subly-solana-program/subly_arcium/artifacts/arcium_program_0.3.0.so"
+
+[[test.validator.account]]
+address = "FHriyvoZotYiFnbUzKFjzRSb2NiaC8RPWY7jtKuKhg65"
+filename = "artifacts/arcium_clock.json"
+
+[[test.validator.account]]
+address = "7MGSS4iKNM4sVib7bDZDJhVqB6EcchPwVnTKenCY1jt3"
+filename = "artifacts/arcium_fee_pool.json"
+
+[[test.validator.account]]
+address = "BoVUVSJAhob2cvM5z4JZTdS6VWRSznh3bbzQD1TFjvDP"
+filename = "artifacts/arx_mint.json"
+
+[[test.validator.account]]
+address = "nHSjCbSd3XD3UwGy5uAAUqEfDf4kBDYaJZ4eF82nCDZ"
+filename = "artifacts/wallet_acc_nHSj_nCDZ.json"
+
+[[test.validator.account]]
+address = "FHxW9978zw3pnycBpZg3wu1gTHxhKzm9Ro5d55gosfHM"
+filename = "artifacts/arx_ata_nHSj_nCDZ.json"
+
+[[test.validator.account]]
+address = "2DSZBSSi82CXHKzND5mYT9XPz9KEcHVdktV1N8i8E9aj"
+filename = "artifacts/wallet_acc_2DSZ_E9aj.json"
+
+[[test.validator.account]]
+address = "CBH4akTxc6rbd5XQEpJieUw4Fue7q1v52GUXaHcxuVSK"
+filename = "artifacts/wallet_acc_callback_CBH4_uVSK.json"
+
+[[test.validator.account]]
+address = "8cvLsZDb7fHXJ5zZ2TXDMYpqhjoHkV2FfNHJRArmSwNU"
+filename = "artifacts/arx_ata_2DSZ_E9aj.json"
+
+[[test.validator.account]]
+address = "FaqtwCTRPdeF3iexhcdNZbr8bcyP9dqkSgHQZEtU84yz"
+filename = "artifacts/operator_acc_2DSZ_E9aj.json"
+
+[[test.validator.account]]
+address = "ELoRR19zrps1G3UYKcAxr7LKbw3kbqkVUXVY9dETMWN7"
+filename = "artifacts/arx_node_2DSZ_E9aj.json"
+
+[[test.validator.account]]
+address = "2RK83CtLBqKeqwsUT4H1fpyv6xdtT8fCLzcYmJMuN38K"
+filename = "artifacts/wallet_acc_2RK8_N38K.json"
+
+[[test.validator.account]]
+address = "H79cA1y15mL56QnudamBLFsq4B2a78dcRpK9EwdQXiNN"
+filename = "artifacts/wallet_acc_callback_H79c_XiNN.json"
+
+[[test.validator.account]]
+address = "9cPrvo7sLVSbdssDYzLvxuvmEEneGDmaKqPT89Ljfodh"
+filename = "artifacts/arx_ata_2RK8_N38K.json"
+
+[[test.validator.account]]
+address = "7CRrdTKH2pczFKNefx2L27eMsvUpESmHNhhxEgQENyuD"
+filename = "artifacts/operator_acc_2RK8_N38K.json"
+
+[[test.validator.account]]
+address = "XdfSwb8ZajhN7CerfBSJVhyfx5fyLtv34QVKSRgMFA9"
+filename = "artifacts/arx_node_2RK8_N38K.json"
+
+[[test.validator.account]]
+address = "GgSqqAyH7AVY3Umcv8NvncrjFaNJuQLmxzxFxPoPW2Yd"
+filename = "artifacts/cluster_acc_0.json"
+
+[[test.validator.account]]
+address = "8Mx2hray7DZymvQny6Q2TWdErbm4r7brAi3ww9gqsy93"
+filename = "artifacts/fund_rewards_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "76EqhAxHLohQv5AqakWnCz6XT86z4BKEzr43UChT2Yr1"
+filename = "artifacts/get_user_available_services_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "FLeRAcevRDTFvqQ3UadC4yUi5F6WaNTijWsF8aMgPisf"
+filename = "artifacts/claim_user_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "FyKLgWXKYww57jxpkaNovVKxswm2e9PMCNxdzzxSWoop"
+filename = "artifacts/claim_user_subly_raw_circuit_1.json"
+
+[[test.validator.account]]
+address = "DHtp74M3q2YBXFPjVNZYBoTX3tuSNz1HLdGiDswmKCKh"
+filename = "artifacts/claim_user_subly_raw_circuit_2.json"
+
+[[test.validator.account]]
+address = "8cfe1KxemzdfiAwS2wEGiY5wEJwpCM3dpRiZzF1yMmGK"
+filename = "artifacts/get_user_stake_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "HrJKfKc1BSNSm2eEXGUhxvt6Dm83y5rmcmDgFUk8z5kJ"
+filename = "artifacts/subscribe_service_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "Dz9Bwe3vBJfso3RuMZ4mBN7e39h8LeBkbVZKhfVhw3LZ"
+filename = "artifacts/unsubscribe_service_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "oSRRukwxG7TBtDMC9KVraRqGbzckoePAm4kqyWwXCgN"
+filename = "artifacts/record_subscription_payment_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "6XU32cwtVHEzvsaw6mbXYYdgCbbsqwduR9QjCpJKBZxH"
+filename = "artifacts/get_subscription_services_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "GKQcv8AfjhBcCPu9TXtpiXRghWaDAMpD7873oSGJ8jgH"
+filename = "artifacts/unstake_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "A4YDJrZq9VBir84CehcrLxkaJzD89Jqeah2gSZULFUg1"
+filename = "artifacts/unstake_subly_raw_circuit_1.json"
+
+[[test.validator.account]]
+address = "DomjSDr1FxAh7vsJkmCSY2oK6vcZNhqBJGQQhbs3Pytm"
+filename = "artifacts/unstake_subly_raw_circuit_2.json"
+
+[[test.validator.account]]
+address = "GobTxEC5XvQD8DZveQQ8o6PBtkPvLswci4C7FepQJ8cP"
+filename = "artifacts/register_paypal_recipient_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "12zAfhrFzyrVNUJoVp3AEW832VJXqg1bNKhC7PenQ8wy"
+filename = "artifacts/get_paypal_recipient_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "AcmeWVcRgNYM4NJzQ4jFzDDHEnEMkHYMR2VEHEZ9ibew"
+filename = "artifacts/find_due_subscriptions_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "2c1xqopXUyGbrt7XKDJ2LPVL1ascWXYp9D6y7WRiSFAb"
+filename = "artifacts/claim_operator_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "G7syppnpLRYP5JoJXodqaqKsRmgefhSLnDWkrJpKpBxk"
+filename = "artifacts/claim_operator_subly_raw_circuit_1.json"
+
+[[test.validator.account]]
+address = "Dv7PRvqbtLX4zWEcqsuJhj78te99uUY8JcEb3Rv8ZbKj"
+filename = "artifacts/claim_operator_subly_raw_circuit_2.json"
+
+[[test.validator.account]]
+address = "8aHixKNSmpeHBYDnxJynWz1yVHVienwASzPLyvtBKfff"
+filename = "artifacts/sync_yield_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "2GcuhXpVgNCwWHgxu9TNW83xxYgaJu2oJ7zpCz175y56"
+filename = "artifacts/sync_yield_subly_raw_circuit_1.json"
+
+[[test.validator.account]]
+address = "bPNvCtnEPG86JLy9jw59HoMr41D67q4xxXHbNKd4Tpw"
+filename = "artifacts/sync_yield_subly_raw_circuit_2.json"
+
+[[test.validator.account]]
+address = "6v38VVxLTnyYzfAt4wqvMeJAKytvhndk6UUHUd62SFGd"
+filename = "artifacts/initialize_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "EGLijPMmpGncoi6VbZUj7qYUwNcWXTcbJhssoReRBpDc"
+filename = "artifacts/register_subscription_service_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "Heihm8rZFRabiAhw8zNoAviRLyHQ4A84frnQZZdyUh3d"
+filename = "artifacts/get_user_subscriptions_subly_raw_circuit_0.json"
+
+[[test.validator.account]]
+address = "2iwonfik6x1AiiHgH8V3xADvh9XrNoqZtZY2P11VhJmt"
+filename = "artifacts/mxe_keygen_comp_def.json"
+
+[[test.validator.account]]
+address = "7a9sFQM1nLM1joKm6VZ8BfnvhURDoms7TvNmnjSLgAZQ"
+filename = "artifacts/mxe_keygen_comp.json"
+
+[[test.validator.account]]
+address = "6bq2UhsWXULq1x48oU8sagkbG8oiayAVesqyFD9tbB8k"
+filename = "artifacts/mxe_acc.json"
+
+[[test.validator.account]]
+address = "Ge1tftcxUc9XuQc29fDhsdWRrPb4EQ6MBzZnfAcctnJ2"
+filename = "artifacts/mempool_acc.json"
+
+[[test.validator.account]]
+address = "FyNnBDbg3Z1ijoHDF47VsSQnEfqQvcCQh7PQreP3JyzM"
+filename = "artifacts/executing_pool_acc.json"
