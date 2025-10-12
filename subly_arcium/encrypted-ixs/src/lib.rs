@@ -1044,6 +1044,247 @@ mod circuits {
     }
 
     #[instruction]
+    pub fn get_paypal_recipient_subly(
+        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
+    ) -> (Enc<Mxe, UserSubscriptionsSecrets>, u8, u8, u128, u128) {
+        let subscriptions = subscriptions_ctxt.to_arcis();
+        let configured_flag: u8 = if subscriptions.paypal_configured {
+            1
+        } else {
+            0
+        };
+        let recipient_type = subscriptions.paypal_recipient_type;
+        let receiver_low = subscriptions.paypal_receiver_hash_low;
+        let receiver_high = subscriptions.paypal_receiver_hash_high;
+
+        (
+            subscriptions_ctxt.owner.from_arcis(subscriptions),
+            configured_flag.reveal(),
+            recipient_type.reveal(),
+            receiver_low.reveal(),
+            receiver_high.reveal(),
+        )
+    }
+
+    #[instruction]
+    pub fn get_subscription_services_subly(
+        registry_ctxt: Enc<Mxe, RegistrySecrets>,
+    ) -> (Enc<Mxe, RegistrySecrets>, u32, u64, u128, u128) {
+        let registry = registry_ctxt.to_arcis();
+        let next_id = registry.next_service_id;
+        let count = registry.service_count;
+        let root_low = registry.services_root_low;
+        let root_high = registry.services_root_high;
+
+        (
+            registry_ctxt.owner.from_arcis(registry),
+            count.reveal(),
+            next_id.reveal(),
+            root_low.reveal(),
+            root_high.reveal(),
+        )
+    }
+
+    #[instruction]
+    pub fn get_user_stake_subly(
+        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
+    ) -> (
+        Enc<Mxe, UserStakeSecrets>,
+        u64,
+        u8,
+        [u64; MAX_STAKE_ENTRIES],
+        [u64; MAX_STAKE_ENTRIES],
+        [i64; MAX_STAKE_ENTRIES],
+        [i64; MAX_STAKE_ENTRIES],
+        [i64; MAX_STAKE_ENTRIES],
+        [u64; MAX_STAKE_ENTRIES],
+        [u64; MAX_STAKE_ENTRIES],
+        [u64; MAX_STAKE_ENTRIES],
+    ) {
+        let stake = stake_ctxt.to_arcis();
+
+        let mut tranche_ids = [0u64; MAX_STAKE_ENTRIES];
+        let mut principals = [0u64; MAX_STAKE_ENTRIES];
+        let mut deposited_at = [0i64; MAX_STAKE_ENTRIES];
+        let mut lock_end_ts = [0i64; MAX_STAKE_ENTRIES];
+        let mut lock_durations = [0i64; MAX_STAKE_ENTRIES];
+        let mut claimed_operator = [0u64; MAX_STAKE_ENTRIES];
+        let mut claimed_user = [0u64; MAX_STAKE_ENTRIES];
+        let mut unrealized = [0u64; MAX_STAKE_ENTRIES];
+
+        for idx in 0..MAX_STAKE_ENTRIES {
+            let entry = stake.entries[idx];
+            tranche_ids[idx] = entry.tranche_id.reveal();
+            principals[idx] = entry.principal.reveal();
+            deposited_at[idx] = entry.deposited_at.reveal();
+            lock_end_ts[idx] = entry.lock_end_ts.reveal();
+            lock_durations[idx] = entry.lock_duration.reveal();
+            claimed_operator[idx] = entry.claimed_operator.reveal();
+            claimed_user[idx] = entry.claimed_user.reveal();
+            unrealized[idx] = entry.unrealized_yield.reveal();
+        }
+
+        (
+            stake_ctxt.owner.from_arcis(stake),
+            stake.total_principal.reveal(),
+            stake.entry_count.reveal(),
+            tranche_ids,
+            principals,
+            deposited_at,
+            lock_end_ts,
+            lock_durations,
+            claimed_operator,
+            claimed_user,
+            unrealized,
+        )
+    }
+
+    #[instruction]
+    pub fn get_user_subscriptions_subly(
+        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
+        now_ts: u64,
+    ) -> (
+        Enc<Mxe, UserSubscriptionsSecrets>,
+        u8,
+        u64,
+        u64,
+        [u64; MAX_USER_SUBSCRIPTIONS],
+        [u64; MAX_USER_SUBSCRIPTIONS],
+        [u64; MAX_USER_SUBSCRIPTIONS],
+        [i64; MAX_USER_SUBSCRIPTIONS],
+        [i64; MAX_USER_SUBSCRIPTIONS],
+        [i64; MAX_USER_SUBSCRIPTIONS],
+        [i64; MAX_USER_SUBSCRIPTIONS],
+        [u8; MAX_USER_SUBSCRIPTIONS],
+        [u8; MAX_USER_SUBSCRIPTIONS],
+    ) {
+        let mut subscriptions = subscriptions_ctxt.to_arcis();
+        let original_state = subscriptions;
+
+        let (now_i64, now_ok) = to_i64_checked(now_ts);
+        let mut success = now_ok;
+        if success {
+            if !subscriptions.refresh(now_i64) {
+                success = false;
+            }
+        } else {
+            let _ = subscriptions.refresh(now_i64);
+        }
+
+        if !success {
+            subscriptions = original_state;
+        }
+
+        let mut subscription_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
+        let mut service_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
+        let mut prices = [0u64; MAX_USER_SUBSCRIPTIONS];
+        let mut started_at = [0i64; MAX_USER_SUBSCRIPTIONS];
+        let mut last_payment = [0i64; MAX_USER_SUBSCRIPTIONS];
+        let mut next_billing = [0i64; MAX_USER_SUBSCRIPTIONS];
+        let mut pending_until = [0i64; MAX_USER_SUBSCRIPTIONS];
+        let mut status_codes = [0u8; MAX_USER_SUBSCRIPTIONS];
+        let mut initial_flags = [0u8; MAX_USER_SUBSCRIPTIONS];
+
+        for idx in 0..MAX_USER_SUBSCRIPTIONS {
+            let slot = subscriptions.subscriptions[idx];
+            subscription_ids[idx] = slot.id.reveal();
+            service_ids[idx] = slot.service_id.reveal();
+            prices[idx] = slot.monthly_price_usdc.reveal();
+            started_at[idx] = slot.started_at.reveal();
+            last_payment[idx] = slot.last_payment_ts.reveal();
+            next_billing[idx] = slot.next_billing_ts.reveal();
+            pending_until[idx] = slot.pending_until_ts.reveal();
+            status_codes[idx] = slot.status.reveal();
+            let initial_flag = if slot.initial_payment_recorded {
+                1u8
+            } else {
+                0u8
+            };
+            initial_flags[idx] = initial_flag.reveal();
+        }
+
+        let success_flag: u8 = if success { 1 } else { 0 };
+
+        (
+            subscriptions_ctxt.owner.from_arcis(subscriptions),
+            success_flag.reveal(),
+            subscriptions.total_active_commitment.reveal(),
+            subscriptions.total_pending_commitment.reveal(),
+            subscription_ids,
+            service_ids,
+            prices,
+            started_at,
+            last_payment,
+            next_billing,
+            pending_until,
+            status_codes,
+            initial_flags,
+        )
+    }
+
+    #[instruction]
+    pub fn get_user_available_services_subly(
+        config_ctxt: Enc<Mxe, ConfigSecrets>,
+        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
+        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
+        now_ts: u64,
+    ) -> (
+        Enc<Mxe, ConfigSecrets>,
+        Enc<Mxe, UserStakeSecrets>,
+        Enc<Mxe, UserSubscriptionsSecrets>,
+        u8,
+        u64,
+        u16,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) {
+        let config = config_ctxt.to_arcis();
+        let stake = stake_ctxt.to_arcis();
+        let mut subscriptions = subscriptions_ctxt.to_arcis();
+        let original_subscriptions = subscriptions;
+
+        let (now_i64, now_ok) = to_i64_checked(now_ts);
+        let mut success = now_ok;
+        if success {
+            if !subscriptions.refresh(now_i64) {
+                success = false;
+            }
+        } else {
+            let _ = subscriptions.refresh(now_i64);
+        }
+
+        if !success {
+            subscriptions = original_subscriptions;
+        }
+
+        let monthly_budget = compute_monthly_budget(stake.total_principal, config.apy_bps);
+        let active_commitment = subscriptions.total_active_commitment;
+        let pending_commitment = subscriptions.total_pending_commitment;
+        let committed_total = active_commitment + pending_commitment;
+        let mut available_budget: u64 = 0;
+        if monthly_budget >= committed_total {
+            available_budget = monthly_budget - committed_total;
+        }
+
+        let success_flag: u8 = if success { 1 } else { 0 };
+
+        (
+            config_ctxt.owner.from_arcis(config),
+            stake_ctxt.owner.from_arcis(stake),
+            subscriptions_ctxt.owner.from_arcis(subscriptions),
+            success_flag.reveal(),
+            stake.total_principal.reveal(),
+            config.apy_bps.reveal(),
+            monthly_budget.reveal(),
+            active_commitment.reveal(),
+            pending_commitment.reveal(),
+            available_budget.reveal(),
+        )
+    }
+
+    #[instruction]
     #[allow(clippy::too_many_arguments)]
     pub fn register_subscription_service_subly(
         registry_ctxt: Enc<Mxe, RegistrySecrets>,

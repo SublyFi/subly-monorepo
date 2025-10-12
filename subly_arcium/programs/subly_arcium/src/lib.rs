@@ -20,6 +20,23 @@ pub use subly::instructions::find_due_subscriptions::{
 use subly::instructions::fund_rewards::{
     callback as fund_rewards_callback_handler, handler as fund_rewards_handler,
 };
+use subly::instructions::get_paypal_recipient::{
+    callback as get_paypal_recipient_callback_handler, handler as get_paypal_recipient_handler,
+};
+use subly::instructions::get_subscription_services::{
+    callback as get_subscription_services_callback_handler,
+    handler as get_subscription_services_handler,
+};
+use subly::instructions::get_user_available_services::{
+    callback as get_user_available_services_callback_handler,
+    handler as get_user_available_services_handler,
+};
+use subly::instructions::get_user_stake::{
+    callback as get_user_stake_callback_handler, handler as get_user_stake_handler,
+};
+use subly::instructions::get_user_subscriptions::{
+    callback as get_user_subscriptions_callback_handler, handler as get_user_subscriptions_handler,
+};
 pub use subly::instructions::initialize::InitializeArgs;
 use subly::instructions::initialize::{
     callback as initialize_callback_handler, handler as initialize_handler,
@@ -75,6 +92,15 @@ pub const COMP_DEF_OFFSET_FIND_DUE_SUBSCRIPTIONS_SUBLY: u32 =
     comp_def_offset("find_due_subscriptions_subly");
 pub const COMP_DEF_OFFSET_CLAIM_USER_SUBLY: u32 = comp_def_offset("claim_user_subly");
 pub const COMP_DEF_OFFSET_CLAIM_OPERATOR_SUBLY: u32 = comp_def_offset("claim_operator_subly");
+pub const COMP_DEF_OFFSET_GET_PAYPAL_RECIPIENT_SUBLY: u32 =
+    comp_def_offset("get_paypal_recipient_subly");
+pub const COMP_DEF_OFFSET_GET_SUBSCRIPTION_SERVICES_SUBLY: u32 =
+    comp_def_offset("get_subscription_services_subly");
+pub const COMP_DEF_OFFSET_GET_USER_AVAILABLE_SERVICES_SUBLY: u32 =
+    comp_def_offset("get_user_available_services_subly");
+pub const COMP_DEF_OFFSET_GET_USER_STAKE_SUBLY: u32 = comp_def_offset("get_user_stake_subly");
+pub const COMP_DEF_OFFSET_GET_USER_SUBSCRIPTIONS_SUBLY: u32 =
+    comp_def_offset("get_user_subscriptions_subly");
 
 declare_id!("EmWktRzQQNanVhAjpHod1UGVkKqJhpJVKxy5V1sc8gFw");
 
@@ -124,6 +150,27 @@ pub mod subly_arcium {
         register_paypal_recipient_callback_handler(ctx, output)
     }
 
+    pub fn init_get_paypal_recipient_subly_comp_def(
+        ctx: Context<InitGetPaypalRecipientCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)
+    }
+
+    pub fn get_paypal_recipient(
+        ctx: Context<GetPaypalRecipient>,
+        computation_offset: u64,
+    ) -> Result<()> {
+        get_paypal_recipient_handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "get_paypal_recipient_subly")]
+    pub fn get_paypal_recipient_subly_callback(
+        ctx: Context<GetPaypalRecipientSublyCallback>,
+        output: ComputationOutputs<crate::GetPaypalRecipientSublyOutput>,
+    ) -> Result<()> {
+        get_paypal_recipient_callback_handler(ctx, output)
+    }
+
     pub fn init_register_subscription_service_subly_comp_def(
         ctx: Context<InitRegisterSubscriptionServiceCompDef>,
     ) -> Result<()> {
@@ -144,6 +191,27 @@ pub mod subly_arcium {
         output: ComputationOutputs<crate::RegisterSubscriptionServiceSublyOutput>,
     ) -> Result<()> {
         register_subscription_service_callback_handler(ctx, output)
+    }
+
+    pub fn init_get_subscription_services_subly_comp_def(
+        ctx: Context<InitGetSubscriptionServicesCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)
+    }
+
+    pub fn get_subscription_services(
+        ctx: Context<GetSubscriptionServices>,
+        computation_offset: u64,
+    ) -> Result<()> {
+        get_subscription_services_handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "get_subscription_services_subly")]
+    pub fn get_subscription_services_subly_callback(
+        ctx: Context<GetSubscriptionServicesSublyCallback>,
+        output: ComputationOutputs<crate::GetSubscriptionServicesSublyOutput>,
+    ) -> Result<()> {
+        get_subscription_services_callback_handler(ctx, output)
     }
 
     pub fn init_subscribe_service_subly_comp_def(
@@ -324,6 +392,64 @@ pub mod subly_arcium {
         find_due_subscriptions_callback_handler(ctx, output)
     }
 
+    pub fn init_get_user_stake_subly_comp_def(ctx: Context<InitGetUserStakeCompDef>) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)
+    }
+
+    pub fn get_user_stake(ctx: Context<GetUserStake>, computation_offset: u64) -> Result<()> {
+        get_user_stake_handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "get_user_stake_subly")]
+    pub fn get_user_stake_subly_callback(
+        ctx: Context<GetUserStakeSublyCallback>,
+        output: ComputationOutputs<crate::GetUserStakeSublyOutput>,
+    ) -> Result<()> {
+        get_user_stake_callback_handler(ctx, output)
+    }
+
+    pub fn init_get_user_subscriptions_subly_comp_def(
+        ctx: Context<InitGetUserSubscriptionsCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)
+    }
+
+    pub fn get_user_subscriptions(
+        ctx: Context<GetUserSubscriptions>,
+        computation_offset: u64,
+    ) -> Result<()> {
+        get_user_subscriptions_handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "get_user_subscriptions_subly")]
+    pub fn get_user_subscriptions_subly_callback(
+        ctx: Context<GetUserSubscriptionsSublyCallback>,
+        output: ComputationOutputs<crate::GetUserSubscriptionsSublyOutput>,
+    ) -> Result<()> {
+        get_user_subscriptions_callback_handler(ctx, output)
+    }
+
+    pub fn init_get_user_available_services_subly_comp_def(
+        ctx: Context<InitGetUserAvailableServicesCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)
+    }
+
+    pub fn get_user_available_services(
+        ctx: Context<GetUserAvailableServices>,
+        computation_offset: u64,
+    ) -> Result<()> {
+        get_user_available_services_handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "get_user_available_services_subly")]
+    pub fn get_user_available_services_subly_callback(
+        ctx: Context<GetUserAvailableServicesSublyCallback>,
+        output: ComputationOutputs<crate::GetUserAvailableServicesSublyOutput>,
+    ) -> Result<()> {
+        get_user_available_services_callback_handler(ctx, output)
+    }
+
     pub fn init_unstake_subly_comp_def(ctx: Context<InitUnstakeCompDef>) -> Result<()> {
         init_comp_def(ctx.accounts, true, 0, None, None)
     }
@@ -424,13 +550,13 @@ pub struct InitializeSublyCallback<'info> {
     #[account(
         mut,
         seeds = [subly::constants::CONFIG_SEED.as_bytes()],
-        bump = config.bump,
+        bump,
     )]
     pub config: Account<'info, subly::state::SublyConfig>,
     #[account(
         mut,
         seeds = [subly::constants::SUBSCRIPTION_REGISTRY_SEED.as_bytes()],
-        bump = subscription_registry.bump,
+        bump,
     )]
     pub subscription_registry: Account<'info, subly::state::SubscriptionRegistry>,
 }
@@ -521,7 +647,7 @@ pub struct RegisterPaypalRecipientSublyCallback<'info> {
             subly::constants::USER_SUBSCRIPTIONS_SEED.as_bytes(),
             user_subscriptions.owner.as_ref()
         ],
-        bump = user_subscriptions.bump,
+        bump,
     )]
     pub user_subscriptions: Account<'info, subly::state::UserSubscriptionsAccount>,
 }
@@ -533,6 +659,95 @@ impl<'info> Discriminator for RegisterPaypalRecipientSublyCallback<'info> {
 #[init_computation_definition_accounts("register_paypal_recipient_subly", payer)]
 #[derive(Accounts)]
 pub struct InitRegisterPaypalCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: Initialized by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+#[queue_computation_accounts("get_paypal_recipient_subly", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct GetPaypalRecipient<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_SUBSCRIPTIONS_SEED.as_bytes(),
+            payer.key().as_ref()
+        ],
+        bump,
+    )]
+    pub user_subscriptions: Account<'info, subly::state::UserSubscriptionsAccount>,
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 9,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mempool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset))]
+    /// CHECK: Verified by the Arcium program.
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(
+        COMP_DEF_OFFSET_GET_PAYPAL_RECIPIENT_SUBLY
+    ))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Account<'info, FeePool>,
+    #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Account<'info, ClockAccount>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("get_paypal_recipient_subly")]
+#[derive(Accounts)]
+pub struct GetPaypalRecipientSublyCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(
+        COMP_DEF_OFFSET_GET_PAYPAL_RECIPIENT_SUBLY
+    ))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instruction sysvar verified by address.
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_SUBSCRIPTIONS_SEED.as_bytes(),
+            user_subscriptions.owner.as_ref()
+        ],
+        bump = user_subscriptions.bump,
+    )]
+    pub user_subscriptions: Account<'info, subly::state::UserSubscriptionsAccount>,
+}
+
+impl<'info> Discriminator for GetPaypalRecipientSublyCallback<'info> {
+    const DISCRIMINATOR: &'static [u8] = b"PAYPFCB1";
+}
+
+#[init_computation_definition_accounts("get_paypal_recipient_subly", payer)]
+#[derive(Accounts)]
+pub struct InitGetPaypalRecipientCompDef<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     #[account(mut, address = derive_mxe_pda!())]
@@ -626,7 +841,7 @@ pub struct RegisterSubscriptionServiceSublyCallback<'info> {
             subly::constants::SUBSCRIPTION_REGISTRY_SEED.as_bytes(),
             &subscription_service.id.to_le_bytes()
         ],
-        bump = subscription_service.bump,
+        bump,
     )]
     pub subscription_service: Account<'info, subly::state::SubscriptionServiceAccount>,
 }
@@ -638,6 +853,89 @@ impl<'info> Discriminator for RegisterSubscriptionServiceSublyCallback<'info> {
 #[init_computation_definition_accounts("register_subscription_service_subly", payer)]
 #[derive(Accounts)]
 pub struct InitRegisterSubscriptionServiceCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: Initialized by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+#[queue_computation_accounts("get_subscription_services_subly", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct GetSubscriptionServices<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [subly::constants::SUBSCRIPTION_REGISTRY_SEED.as_bytes()],
+        bump,
+    )]
+    pub subscription_registry: Account<'info, subly::state::SubscriptionRegistry>,
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 9,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mempool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset))]
+    /// CHECK: Verified by the Arcium program.
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(
+        COMP_DEF_OFFSET_GET_SUBSCRIPTION_SERVICES_SUBLY
+    ))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Account<'info, FeePool>,
+    #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Account<'info, ClockAccount>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("get_subscription_services_subly")]
+#[derive(Accounts)]
+pub struct GetSubscriptionServicesSublyCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(
+        COMP_DEF_OFFSET_GET_SUBSCRIPTION_SERVICES_SUBLY
+    ))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instruction sysvar verified by address.
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [subly::constants::SUBSCRIPTION_REGISTRY_SEED.as_bytes()],
+        bump = subscription_registry.bump,
+    )]
+    pub subscription_registry: Account<'info, subly::state::SubscriptionRegistry>,
+}
+
+impl<'info> Discriminator for GetSubscriptionServicesSublyCallback<'info> {
+    const DISCRIMINATOR: &'static [u8] = b"SRVFCHCB";
+}
+
+#[init_computation_definition_accounts("get_subscription_services_subly", payer)]
+#[derive(Accounts)]
+pub struct InitGetSubscriptionServicesCompDef<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     #[account(mut, address = derive_mxe_pda!())]
@@ -749,7 +1047,7 @@ pub struct SubscribeServiceSublyCallback<'info> {
             subly::constants::USER_POSITION_SEED.as_bytes(),
             user_stake.owner.as_ref()
         ],
-        bump = user_stake.bump,
+        bump,
     )]
     pub user_stake: Account<'info, subly::state::UserStakeAccount>,
     #[account(
@@ -1053,6 +1351,299 @@ pub struct InitFindDueSubscriptionsCompDef<'info> {
     pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(mut)]
     /// CHECK: Initialized by the Arcium program
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+#[queue_computation_accounts("get_user_stake_subly", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct GetUserStake<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_POSITION_SEED.as_bytes(),
+            payer.key().as_ref()
+        ],
+        bump,
+    )]
+    pub user_stake: Account<'info, subly::state::UserStakeAccount>,
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 9,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mempool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset))]
+    /// CHECK: Verified by the Arcium program.
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_GET_USER_STAKE_SUBLY))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Account<'info, FeePool>,
+    #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Account<'info, ClockAccount>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("get_user_stake_subly")]
+#[derive(Accounts)]
+pub struct GetUserStakeSublyCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_GET_USER_STAKE_SUBLY))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instruction sysvar verified by address.
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_POSITION_SEED.as_bytes(),
+            user_stake.owner.as_ref()
+        ],
+        bump,
+    )]
+    pub user_stake: Account<'info, subly::state::UserStakeAccount>,
+}
+
+impl<'info> Discriminator for GetUserStakeSublyCallback<'info> {
+    const DISCRIMINATOR: &'static [u8] = b"USTAKECB";
+}
+
+#[init_computation_definition_accounts("get_user_stake_subly", payer)]
+#[derive(Accounts)]
+pub struct InitGetUserStakeCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: Initialized by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+#[queue_computation_accounts("get_user_subscriptions_subly", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct GetUserSubscriptions<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_SUBSCRIPTIONS_SEED.as_bytes(),
+            payer.key().as_ref()
+        ],
+        bump,
+    )]
+    pub user_subscriptions: Account<'info, subly::state::UserSubscriptionsAccount>,
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 9,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mempool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset))]
+    /// CHECK: Verified by the Arcium program.
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(
+        COMP_DEF_OFFSET_GET_USER_SUBSCRIPTIONS_SUBLY
+    ))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Account<'info, FeePool>,
+    #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Account<'info, ClockAccount>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("get_user_subscriptions_subly")]
+#[derive(Accounts)]
+pub struct GetUserSubscriptionsSublyCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(
+        COMP_DEF_OFFSET_GET_USER_SUBSCRIPTIONS_SUBLY
+    ))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instruction sysvar verified by address.
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_SUBSCRIPTIONS_SEED.as_bytes(),
+            user_subscriptions.owner.as_ref()
+        ],
+        bump,
+    )]
+    pub user_subscriptions: Account<'info, subly::state::UserSubscriptionsAccount>,
+}
+
+impl<'info> Discriminator for GetUserSubscriptionsSublyCallback<'info> {
+    const DISCRIMINATOR: &'static [u8] = b"USUBSCB1";
+}
+
+#[init_computation_definition_accounts("get_user_subscriptions_subly", payer)]
+#[derive(Accounts)]
+pub struct InitGetUserSubscriptionsCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: Initialized by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+#[queue_computation_accounts("get_user_available_services_subly", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct GetUserAvailableServices<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [subly::constants::CONFIG_SEED.as_bytes()],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, subly::state::SublyConfig>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_POSITION_SEED.as_bytes(),
+            payer.key().as_ref()
+        ],
+        bump,
+    )]
+    pub user_stake: Account<'info, subly::state::UserStakeAccount>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_SUBSCRIPTIONS_SEED.as_bytes(),
+            payer.key().as_ref()
+        ],
+        bump,
+    )]
+    pub user_subscriptions: Account<'info, subly::state::UserSubscriptionsAccount>,
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 9,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mempool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!())]
+    /// CHECK: Verified by the Arcium program.
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset))]
+    /// CHECK: Verified by the Arcium program.
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(
+        COMP_DEF_OFFSET_GET_USER_AVAILABLE_SERVICES_SUBLY
+    ))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Account<'info, FeePool>,
+    #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Account<'info, ClockAccount>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("get_user_available_services_subly")]
+#[derive(Accounts)]
+pub struct GetUserAvailableServicesSublyCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(
+        COMP_DEF_OFFSET_GET_USER_AVAILABLE_SERVICES_SUBLY
+    ))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instruction sysvar verified by address.
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [subly::constants::CONFIG_SEED.as_bytes()],
+        bump,
+    )]
+    pub config: Account<'info, subly::state::SublyConfig>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_POSITION_SEED.as_bytes(),
+            user_stake.owner.as_ref()
+        ],
+        bump,
+    )]
+    pub user_stake: Account<'info, subly::state::UserStakeAccount>,
+    #[account(
+        mut,
+        seeds = [
+            subly::constants::USER_SUBSCRIPTIONS_SEED.as_bytes(),
+            user_subscriptions.owner.as_ref()
+        ],
+        bump,
+    )]
+    pub user_subscriptions: Account<'info, subly::state::UserSubscriptionsAccount>,
+}
+
+impl<'info> Discriminator for GetUserAvailableServicesSublyCallback<'info> {
+    const DISCRIMINATOR: &'static [u8] = b"USRAVLCB";
+}
+
+#[init_computation_definition_accounts("get_user_available_services_subly", payer)]
+#[derive(Accounts)]
+pub struct InitGetUserAvailableServicesCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: Initialized by the Arcium program.
     pub comp_def_account: UncheckedAccount<'info>,
     pub arcium_program: Program<'info, Arcium>,
     pub system_program: Program<'info, System>,
