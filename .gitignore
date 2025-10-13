@@ -12,3 +12,7 @@ out
 *.log
 *.tsbuildinfo
 .vscode
+artifacts/
+build
+encrypted-ixs/arcis_temp_target
+encrypted-ixs/src/main.rs
