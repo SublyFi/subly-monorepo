@@ -5,15 +5,7 @@ target
 node_modules
 test-ledger
 .yarn
-.env
-.env.local
-.next
-out
-*.log
-*.tsbuildinfo
-.vscode
-artifacts/
-build
 encrypted-ixs/arcis_temp_target
-encrypted-ixs/src/main.rs
 build
+encrypted-ixs/src/main.rs
+artifacts/
