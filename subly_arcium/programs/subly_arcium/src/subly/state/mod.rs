@@ -3,17 +3,21 @@ use arcium_anchor::prelude::MXEEncryptedStruct;
 
 use crate::subly::error::ErrorCode;
 
+pub const MXE_NONCE_LEN: usize = 16;
+pub const MXE_CIPHERTEXT_LEN: usize = 32;
+
 pub const CONFIG_CT_LEN: usize = 6;
 pub const REGISTRY_CT_LEN: usize = 4;
-pub const USER_STAKE_CT_LEN: usize = 164;
-pub const USER_SUBSCRIPTIONS_CT_LEN: usize = 43;
-pub const SUBSCRIPTION_SERVICE_CT_LEN: usize = 13;
+pub const USER_STAKE_CT_LEN: usize = 6;
+pub const USER_SUBSCRIPTIONS_CT_LEN: usize = 7;
+pub const SUBSCRIPTION_CONTRACT_CT_LEN: usize = 9;
+pub const SUBSCRIPTION_SERVICE_CT_LEN: usize = 6;
 
 const fn encrypted_block_len(ciphertexts: usize) -> usize {
-    16 + (ciphertexts * 32)
+    MXE_NONCE_LEN + (ciphertexts * MXE_CIPHERTEXT_LEN)
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
 pub struct EncryptedState<const LEN: usize> {
     pub nonce: u128,
     pub ciphertexts: [[u8; 32]; LEN],
@@ -178,6 +182,45 @@ impl UserSubscriptionsAccount {
 
     pub const ENCRYPTED_STATE_OFFSET: usize = 8 + 32;
     pub const ENCRYPTED_STATE_LEN: usize = encrypted_block_len(USER_SUBSCRIPTIONS_CT_LEN);
+}
+
+#[account]
+pub struct SubscriptionContractAccount {
+    pub owner: Pubkey,
+    pub contract_seed: [u8; 32],
+    pub encrypted_state: EncryptedState<SUBSCRIPTION_CONTRACT_CT_LEN>,
+    pub pending_computation_offset: Option<u64>,
+    pub bump: u8,
+}
+
+impl SubscriptionContractAccount {
+    pub const LEN: usize = 8 // discriminator
+        + 32 // owner
+        + 32 // contract seed
+        + encrypted_block_len(SUBSCRIPTION_CONTRACT_CT_LEN)
+        + 1  // pending computation option tag
+        + 8  // pending computation value
+        + 1; // bump
+
+    pub fn blank_state() -> EncryptedState<SUBSCRIPTION_CONTRACT_CT_LEN> {
+        EncryptedState::blank()
+    }
+
+    pub fn ensure_owner(&mut self, owner: Pubkey, seed: [u8; 32], bump: u8) -> Result<()> {
+        if self.owner == Pubkey::default() {
+            self.owner = owner;
+            self.contract_seed = seed;
+            self.pending_computation_offset = None;
+            self.encrypted_state = Self::blank_state();
+            self.bump = bump;
+        } else if self.owner != owner || self.contract_seed != seed {
+            return Err(ErrorCode::InvalidSubscriptionAccount.into());
+        }
+        Ok(())
+    }
+
+    pub const ENCRYPTED_STATE_OFFSET: usize = 8 + 32 + 32;
+    pub const ENCRYPTED_STATE_LEN: usize = encrypted_block_len(SUBSCRIPTION_CONTRACT_CT_LEN);
 }
 
 #[account]

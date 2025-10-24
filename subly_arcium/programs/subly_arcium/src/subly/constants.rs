@@ -6,7 +6,9 @@ pub const VAULT_SEED: &str = "vault";
 
 pub const SUBSCRIPTION_REGISTRY_SEED: &str = "subscription_registry";
 
-pub const USER_SUBSCRIPTIONS_SEED: &str = "user_subscriptions";
+pub const USER_SUMMARY_SEED: &str = "user_subscriptions";
+pub const USER_SUBSCRIPTIONS_SEED: &str = USER_SUMMARY_SEED;
+pub const USER_CONTRACT_SEED: &str = "user_contract";
 
 pub const INDEX_SCALE: u128 = 1_000_000_000_000u128;
 
@@ -33,6 +35,8 @@ pub fn lock_duration_for_index(index: u8) -> Option<i64> {
     LOCK_OPTIONS.get(index as usize).copied()
 }
 
+pub const BILLING_PERIOD_SECONDS: i64 = 30 * SECONDS_PER_DAY;
+
 pub const MAX_SERVICE_NAME_LEN: usize = 64;
 
 pub const MAX_SERVICE_DETAILS_LEN: usize = 512;
@@ -41,8 +45,4 @@ pub const MAX_SERVICE_LOGO_URL_LEN: usize = 256;
 
 pub const MAX_SERVICE_PROVIDER_LEN: usize = 128;
 
-pub const BILLING_PERIOD_SECONDS: i64 = 30 * SECONDS_PER_DAY;
-
 pub const MAX_PAYPAL_RECEIVER_LEN: usize = 256;
-
-pub const MAX_USER_SUBSCRIPTIONS: usize = 4;

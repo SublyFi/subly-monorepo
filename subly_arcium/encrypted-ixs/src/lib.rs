@@ -8,8 +8,10 @@ mod circuits {
     const DEFAULT_APY_BPS: u16 = 1_000;
     const BASIS_POINTS_DIVISOR: u64 = 10_000;
     const SECONDS_PER_YEAR: u64 = 31_536_000;
-    const MAX_STAKE_ENTRIES: usize = 16;
-    const LOCK_OPTIONS: [i64; 4] = [30 * 86_400, 90 * 86_400, 180 * 86_400, 365 * 86_400];
+
+    const STATUS_UNUSED: u8 = 0;
+    const STATUS_ACTIVE: u8 = 1;
+    const STATUS_CANCELLED: u8 = 2;
 
     #[derive(Clone, Copy)]
     pub struct ConfigSecrets {
@@ -30,202 +32,168 @@ mod circuits {
     }
 
     #[derive(Clone, Copy)]
-    pub struct StakeEntrySecrets {
-        pub tranche_id: u64,
-        pub principal: u64,
-        pub deposited_at: i64,
-        pub lock_end_ts: i64,
-        pub lock_duration: i64,
-        pub start_acc_index: u128,
-        pub last_acc_index: u128,
-        pub claimed_operator: u64,
-        pub claimed_user: u64,
-        pub unrealized_yield: u64,
+    pub struct StakeSecrets {
+        pub total_principal: u64,
+        pub locked_principal: u64,
+        pub rewards_earned: u64,
+        pub last_update_ts: i64,
+        pub unlock_ts: i64,
+        pub tranche_counter: u64,
     }
 
-    impl StakeEntrySecrets {
-        fn reset(&mut self) {
-            self.tranche_id = 0;
-            self.principal = 0;
-            self.deposited_at = 0;
-            self.lock_end_ts = 0;
-            self.lock_duration = 0;
-            self.start_acc_index = 0;
-            self.last_acc_index = 0;
-            self.claimed_operator = 0;
-            self.claimed_user = 0;
-            self.unrealized_yield = 0;
+    impl StakeSecrets {
+        pub fn default() -> Self {
+            Self {
+                total_principal: 0,
+                locked_principal: 0,
+                rewards_earned: 0,
+                last_update_ts: 0,
+                unlock_ts: 0,
+                tranche_counter: 0,
+            }
         }
     }
 
     #[derive(Clone, Copy)]
-    pub struct UserStakeSecrets {
-        pub total_principal: u64,
-        pub last_updated_ts: i64,
-        pub next_tranche_id: u64,
-        pub entry_count: u8,
-        pub entries: [StakeEntrySecrets; MAX_STAKE_ENTRIES],
+    pub struct UserSummarySecrets {
+        pub active_commitment: u64,
+        pub pending_commitment: u64,
+        pub total_paid_amount: u64,
+        pub paypal_configured: u8,
+        pub paypal_recipient_type: u8,
+        pub paypal_receiver_hash_low: u128,
+        pub paypal_receiver_hash_high: u128,
     }
 
-    pub const MAX_USER_SUBSCRIPTIONS: usize = 4;
-    const SUB_STATUS_UNUSED: u8 = 0;
-    const SUB_STATUS_ACTIVE: u8 = 1;
-    const SUB_STATUS_PENDING: u8 = 2;
-    const SUB_STATUS_CANCELLED: u8 = 3;
+    impl UserSummarySecrets {
+        pub fn default() -> Self {
+            Self {
+                active_commitment: 0,
+                pending_commitment: 0,
+                total_paid_amount: 0,
+                paypal_configured: 0,
+                paypal_recipient_type: 0,
+                paypal_receiver_hash_low: 0,
+                paypal_receiver_hash_high: 0,
+            }
+        }
+    }
 
     #[derive(Clone, Copy)]
-    pub struct SubscriptionSecrets {
-        pub id: u64,
-        pub service_id: u64,
+    pub struct SubscriptionContractSecrets {
+        pub service_hash_low: u128,
+        pub service_hash_high: u128,
         pub monthly_price_usdc: u64,
+        pub status: u8,
         pub started_at: i64,
         pub last_payment_ts: i64,
         pub next_billing_ts: i64,
         pub pending_until_ts: i64,
-        pub status: u8,
-        pub initial_payment_recorded: bool,
-    }
-
-    impl SubscriptionSecrets {
-        fn reset(&mut self) {
-            self.id = 0;
-            self.service_id = 0;
-            self.monthly_price_usdc = 0;
-            self.started_at = 0;
-            self.last_payment_ts = 0;
-            self.next_billing_ts = 0;
-            self.pending_until_ts = 0;
-            self.status = SUB_STATUS_UNUSED;
-            self.initial_payment_recorded = false;
-        }
-
-        fn is_available(&self) -> bool {
-            self.status == SUB_STATUS_UNUSED || self.status == SUB_STATUS_CANCELLED
-        }
-
-        fn is_active_or_pending(&self) -> bool {
-            self.status == SUB_STATUS_ACTIVE || self.status == SUB_STATUS_PENDING
-        }
-    }
-
-    #[derive(Clone, Copy)]
-    pub struct UserSubscriptionsSecrets {
-        pub next_subscription_id: u64,
-        pub total_active_commitment: u64,
-        pub total_pending_commitment: u64,
-        pub paypal_configured: bool,
-        pub paypal_recipient_type: u8,
-        pub paypal_receiver_hash_low: u128,
-        pub paypal_receiver_hash_high: u128,
-        pub subscriptions: [SubscriptionSecrets; MAX_USER_SUBSCRIPTIONS],
-    }
-
-    impl UserSubscriptionsSecrets {
-        fn refresh(&mut self, now: i64) -> bool {
-            let mut released: u64 = 0;
-            for idx in 0..MAX_USER_SUBSCRIPTIONS {
-                let slot_ref = &mut self.subscriptions[idx];
-                let is_pending = slot_ref.status == SUB_STATUS_PENDING;
-                let pending_until = slot_ref.pending_until_ts;
-                let can_finalize = is_pending && pending_until > 0 && now >= pending_until;
-                if can_finalize {
-                    released = released + slot_ref.monthly_price_usdc;
-                    slot_ref.status = SUB_STATUS_CANCELLED;
-                    slot_ref.pending_until_ts = 0;
-                    slot_ref.last_payment_ts = 0;
-                    slot_ref.next_billing_ts = 0;
-                }
-            }
-
-            let mut ok = true;
-            if released > 0 {
-                if released > self.total_pending_commitment {
-                    ok = false;
-                } else {
-                    self.total_pending_commitment = self.total_pending_commitment - released;
-                }
-            }
-
-            ok
-        }
-
-        fn has_active_or_pending(&self, service_id: u64) -> bool {
-            let mut found = false;
-            for idx in 0..MAX_USER_SUBSCRIPTIONS {
-                let slot = self.subscriptions[idx];
-                let matches_service = slot.service_id == service_id;
-                let active_or_pending = slot.is_active_or_pending();
-                if matches_service && active_or_pending {
-                    found = true;
-                }
-            }
-            found
-        }
-
-        fn allocate_slot_index(&mut self) -> usize {
-            let mut found: usize = MAX_USER_SUBSCRIPTIONS;
-            for idx in 0..MAX_USER_SUBSCRIPTIONS {
-                let slot = self.subscriptions[idx];
-                if slot.is_available() && found == MAX_USER_SUBSCRIPTIONS {
-                    found = idx;
-                }
-            }
-            if found < MAX_USER_SUBSCRIPTIONS {
-                self.subscriptions[found].reset();
-            }
-            found
-        }
-
-        fn find_subscription_index(&self, subscription_id: u64) -> usize {
-            let mut found: usize = MAX_USER_SUBSCRIPTIONS;
-            for idx in 0..MAX_USER_SUBSCRIPTIONS {
-                let slot = self.subscriptions[idx];
-                let matches_id = slot.id == subscription_id;
-                if matches_id && slot.is_active_or_pending() && found == MAX_USER_SUBSCRIPTIONS {
-                    found = idx;
-                }
-            }
-            found
-        }
+        pub billing_interval_secs: u64,
     }
 
     #[derive(Clone, Copy)]
     pub struct ServiceSecrets {
-        pub id: u64,
+        pub service_hash_low: u128,
+        pub service_hash_high: u128,
         pub monthly_price_usdc: u64,
-        pub created_at: i64,
-        pub creator_low: u128,
-        pub creator_high: u128,
-        pub name_hash_low: u128,
-        pub name_hash_high: u128,
-        pub details_hash_low: u128,
-        pub details_hash_high: u128,
-        pub logo_hash_low: u128,
-        pub logo_hash_high: u128,
-        pub provider_hash_low: u128,
-        pub provider_hash_high: u128,
+        pub billing_interval_secs: u64,
+        pub metadata_hash_low: u128,
+        pub metadata_hash_high: u128,
     }
 
+    #[derive(Clone, Copy)]
     pub struct InitializeInput {
         pub clock_unix_ts: u64,
     }
 
+    #[derive(Clone, Copy)]
     pub struct StakeInput {
         pub amount: u64,
-        pub lock_option: u8,
+        pub lock_duration_secs: u64,
         pub now_ts: u64,
     }
 
+    #[derive(Clone, Copy)]
     pub struct UnstakeInput {
-        pub tranche_id: u64,
+        pub amount: u64,
         pub now_ts: u64,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct SubscribeInput {
+        pub now_ts: u64,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct UnsubscribeInput {
+        pub now_ts: u64,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct PaymentInput {
+        pub payment_ts: u64,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct DueCheckInput {
+        pub now_ts: u64,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct PaypalInput {
+        pub recipient_type: u8,
+        pub receiver_hash_low: u128,
+        pub receiver_hash_high: u128,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct ServiceRegistrationInput {
+        pub service_hash_low: u128,
+        pub service_hash_high: u128,
+        pub monthly_price_usdc: u64,
+        pub billing_interval_secs: u64,
+        pub metadata_hash_low: u128,
+        pub metadata_hash_high: u128,
+    }
+
+    fn accrue_config(config: &mut ConfigSecrets, now: i64) {
+        if now > config.last_update_ts {
+            let elapsed = (now - config.last_update_ts) as u64;
+            if elapsed > 0 && config.total_principal > 0 {
+                let numerator = (config.apy_bps as u128) * (elapsed as u128) * INDEX_SCALE;
+                let denominator = (BASIS_POINTS_DIVISOR as u128) * (SECONDS_PER_YEAR as u128);
+                if denominator > 0 {
+                    let delta_index = numerator / denominator;
+                    config.acc_index = config.acc_index + delta_index;
+                }
+            }
+            config.last_update_ts = now;
+        }
+    }
+
+    fn saturating_add(a: u64, b: u64) -> u64 {
+        let sum = a + b;
+        if sum < a {
+            u64::MAX
+        } else {
+            sum
+        }
+    }
+
+    fn saturating_sub(a: u64, b: u64) -> u64 {
+        if b > a {
+            0
+        } else {
+            a - b
+        }
     }
 
     #[instruction]
     pub fn initialize_subly(
         input: InitializeInput,
     ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, RegistrySecrets>) {
-        let config_secrets = ConfigSecrets {
+        let config = ConfigSecrets {
             total_principal: 0,
             reward_pool: 0,
             acc_index: INDEX_SCALE,
@@ -234,1583 +202,261 @@ mod circuits {
             paused: false,
         };
 
-        let registry_secrets = RegistrySecrets {
+        let registry = RegistrySecrets {
             next_service_id: 0,
             service_count: 0,
             services_root_low: 0,
             services_root_high: 0,
         };
 
-        let config_cipher = Mxe::get();
-        let registry_cipher = Mxe::get();
+        (
+            Mxe::get().from_arcis(config),
+            Mxe::get().from_arcis(registry),
+        )
+    }
+
+    #[instruction]
+    pub fn register_paypal_recipient_subly(
+        summary_ctxt: Enc<Mxe, UserSummarySecrets>,
+        input: PaypalInput,
+    ) -> (Enc<Mxe, UserSummarySecrets>, u8) {
+        let mut summary = summary_ctxt.to_arcis();
+
+        summary.paypal_configured = 1;
+        summary.paypal_recipient_type = input.recipient_type;
+        summary.paypal_receiver_hash_low = input.receiver_hash_low;
+        summary.paypal_receiver_hash_high = input.receiver_hash_high;
+
+        (summary_ctxt.owner.from_arcis(summary), 1u8)
+    }
+
+    #[instruction]
+    pub fn register_subscription_service_subly(
+        registry_ctxt: Enc<Mxe, RegistrySecrets>,
+        service_ctxt: Enc<Mxe, ServiceSecrets>,
+        input: ServiceRegistrationInput,
+    ) -> (
+        Enc<Mxe, RegistrySecrets>,
+        Enc<Mxe, ServiceSecrets>,
+        u64,
+        u32,
+    ) {
+        let mut registry = registry_ctxt.to_arcis();
+        let mut service = service_ctxt.to_arcis();
+
+        let service_id = registry.next_service_id;
+        registry.next_service_id = registry.next_service_id + 1;
+        registry.service_count = registry.service_count + 1;
+        registry.services_root_low = input.service_hash_low;
+        registry.services_root_high = input.service_hash_high;
+
+        service.service_hash_low = input.service_hash_low;
+        service.service_hash_high = input.service_hash_high;
+        service.monthly_price_usdc = input.monthly_price_usdc;
+        service.billing_interval_secs = input.billing_interval_secs;
+        service.metadata_hash_low = input.metadata_hash_low;
+        service.metadata_hash_high = input.metadata_hash_high;
 
         (
-            config_cipher.from_arcis(config_secrets),
-            registry_cipher.from_arcis(registry_secrets),
+            registry_ctxt.owner.from_arcis(registry),
+            service_ctxt.owner.from_arcis(service),
+            service_id.reveal(),
+            registry.service_count.reveal(),
         )
+    }
+
+    #[instruction]
+    pub fn initialize_user_stake_subly() -> Enc<Mxe, StakeSecrets> {
+        let stake = StakeSecrets::default();
+        Mxe::get().from_arcis(stake)
     }
 
     #[instruction]
     pub fn stake_subly(
         config_ctxt: Enc<Mxe, ConfigSecrets>,
-        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
+        stake_ctxt: Enc<Mxe, StakeSecrets>,
         input: StakeInput,
-    ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, UserStakeSecrets>, u8, u64) {
+    ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, StakeSecrets>) {
         let mut config = config_ctxt.to_arcis();
-        let mut stake_state = stake_ctxt.to_arcis();
+        let mut stake = stake_ctxt.to_arcis();
 
         let now = input.now_ts as i64;
         accrue_config(&mut config, now);
-        sync_entries(&mut stake_state, config.acc_index, now);
 
-        let mut updated_config = config;
-        let mut updated_stake = stake_state;
-        let mut placed = false;
+        stake.total_principal = saturating_add(stake.total_principal, input.amount);
+        stake.locked_principal = saturating_add(stake.locked_principal, input.amount);
+        stake.last_update_ts = now;
+        stake.unlock_ts = now + (input.lock_duration_secs as i64);
+        stake.tranche_counter = stake.tranche_counter + 1;
 
-        let lock_option_index = input.lock_option as usize;
-        if input.amount > 0 && lock_option_index < LOCK_OPTIONS.len() {
-            let lock_duration = LOCK_OPTIONS[lock_option_index];
-            if lock_duration > 0 {
-                let current_count = updated_stake.entry_count as usize;
-                if current_count < MAX_STAKE_ENTRIES {
-                    let tranche_id = updated_stake.next_tranche_id;
-                    let next_id = tranche_id + 1;
-                    populate_entry(
-                        &mut updated_stake.entries[current_count],
-                        tranche_id,
-                        input.amount,
-                        now,
-                        lock_duration,
-                        config.acc_index,
-                    );
-                    updated_stake.total_principal = updated_stake.total_principal + input.amount;
-                    updated_stake.last_updated_ts = now;
-                    updated_stake.entry_count = (current_count as u8) + 1;
-                    updated_stake.next_tranche_id = next_id;
-                    updated_config.total_principal = updated_config.total_principal + input.amount;
-                    placed = true;
-                }
-            }
-        }
-
-        let final_stake = if placed { updated_stake } else { stake_state };
-        let final_config = if placed { updated_config } else { config };
-        let final_entry_count = final_stake.entry_count;
-        let final_next_tranche_id = final_stake.next_tranche_id;
-
-        let public_entry_count = final_entry_count.reveal();
-        let public_next_tranche_id = final_next_tranche_id.reveal();
+        config.total_principal = saturating_add(config.total_principal, input.amount);
 
         (
-            config_ctxt.owner.from_arcis(final_config),
-            stake_ctxt.owner.from_arcis(final_stake),
-            public_entry_count,
-            public_next_tranche_id,
+            config_ctxt.owner.from_arcis(config),
+            stake_ctxt.owner.from_arcis(stake),
         )
     }
 
     #[instruction]
     pub fn unstake_subly(
         config_ctxt: Enc<Mxe, ConfigSecrets>,
-        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
+        stake_ctxt: Enc<Mxe, StakeSecrets>,
         input: UnstakeInput,
-    ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, UserStakeSecrets>, u64, u8) {
+    ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, StakeSecrets>, u64) {
         let mut config = config_ctxt.to_arcis();
-        let mut stake_state = stake_ctxt.to_arcis();
+        let mut stake = stake_ctxt.to_arcis();
 
         let now = input.now_ts as i64;
         accrue_config(&mut config, now);
-        sync_entries(&mut stake_state, config.acc_index, now);
 
-        let mut updated_config = config;
-        let mut updated_stake = stake_state;
-        let mut withdrawn_principal: u64 = 0;
-        let mut removed_index: usize = MAX_STAKE_ENTRIES;
-
-        let active_count = updated_stake.entry_count as usize;
-        for idx in 0..MAX_STAKE_ENTRIES {
-            let within_active = idx < active_count;
-            let not_found_yet = removed_index == MAX_STAKE_ENTRIES;
-            if within_active && not_found_yet {
-                let entry = updated_stake.entries[idx];
-                let matches_tranche = entry.tranche_id == input.tranche_id;
-                let has_principal = entry.principal > 0;
-                let lock_finished = now >= entry.lock_end_ts;
-                let yield_cleared = entry.unrealized_yield == 0;
-                if matches_tranche && has_principal && lock_finished && yield_cleared {
-                    withdrawn_principal = entry.principal;
-                    removed_index = idx;
-                }
-            }
+        let mut withdrawable = 0u64;
+        if now >= stake.unlock_ts {
+            withdrawable = stake.locked_principal;
         }
-
-        if removed_index < active_count {
-            let last_index = active_count - 1;
-            let replacement = updated_stake.entries[last_index];
-
-            if removed_index != last_index {
-                updated_stake.entries[removed_index] = replacement;
-            }
-            updated_stake.entries[last_index].reset();
-            updated_stake.entry_count = last_index as u8;
-            updated_stake.total_principal = updated_stake.total_principal - withdrawn_principal;
-            updated_stake.last_updated_ts = now;
-            updated_config.total_principal = updated_config.total_principal - withdrawn_principal;
+        let requested = input.amount;
+        let amount = if requested == 0 {
+            withdrawable
+        } else if requested <= withdrawable {
+            requested
         } else {
-            withdrawn_principal = 0;
-        }
-
-        let final_stake = if withdrawn_principal > 0 {
-            updated_stake
-        } else {
-            stake_state
+            0
         };
 
-        let final_config = if withdrawn_principal > 0 {
-            updated_config
-        } else {
-            config
-        };
-
-        let public_principal = withdrawn_principal.reveal();
-        let public_entry_count = final_stake.entry_count.reveal();
-
-        (
-            config_ctxt.owner.from_arcis(final_config),
-            stake_ctxt.owner.from_arcis(final_stake),
-            public_principal,
-            public_entry_count,
-        )
-    }
-
-    #[instruction]
-    pub fn fund_rewards_subly(
-        config_ctxt: Enc<Mxe, ConfigSecrets>,
-        amount: u64,
-        now_ts: u64,
-    ) -> (Enc<Mxe, ConfigSecrets>, u8, u64, u64) {
-        let mut config = config_ctxt.to_arcis();
-        let original_config = config;
-
-        let (converted_now, now_ok) = to_i64_checked(now_ts);
-        let mut success = now_ok;
-
-        if success {
-            accrue_config(&mut config, converted_now);
-            if amount == 0 {
-                success = false;
-            } else if config.reward_pool > u64::MAX - amount {
-                success = false;
-            } else {
-                config.reward_pool = config.reward_pool + amount;
-            }
+        if amount > 0 {
+            stake.locked_principal = saturating_sub(stake.locked_principal, amount);
+            stake.total_principal = saturating_sub(stake.total_principal, amount);
+            config.total_principal = saturating_sub(config.total_principal, amount);
         }
-
-        if !success {
-            config = original_config;
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-        let reward_pool_out = if success { config.reward_pool } else { 0u64 };
-        let funded_amount_out = if success { amount } else { 0u64 };
-
-        (
-            config_ctxt.owner.from_arcis(config),
-            success_flag.reveal(),
-            reward_pool_out.reveal(),
-            funded_amount_out.reveal(),
-        )
-    }
-
-    #[instruction]
-    pub fn register_paypal_recipient_subly(
-        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
-        recipient_type: u8,
-        receiver_hash_low: u128,
-        receiver_hash_high: u128,
-    ) -> (Enc<Mxe, UserSubscriptionsSecrets>, u8, u128, u128) {
-        let mut secrets = subscriptions_ctxt.to_arcis();
-        secrets.paypal_configured = true;
-        secrets.paypal_recipient_type = recipient_type;
-        secrets.paypal_receiver_hash_low = receiver_hash_low;
-        secrets.paypal_receiver_hash_high = receiver_hash_high;
-        let updated = subscriptions_ctxt.owner.from_arcis(secrets);
-        (
-            updated,
-            recipient_type,
-            receiver_hash_low,
-            receiver_hash_high,
-        )
-    }
-
-    #[instruction]
-    #[allow(clippy::too_many_arguments)]
-    pub fn subscribe_service_subly(
-        config_ctxt: Enc<Mxe, ConfigSecrets>,
-        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
-        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
-        service_ctxt: Enc<Mxe, ServiceSecrets>,
-        expected_service_id: u64,
-        now_ts: u64,
-        billing_period_seconds: u64,
-    ) -> (
-        Enc<Mxe, ConfigSecrets>,
-        Enc<Mxe, UserStakeSecrets>,
-        Enc<Mxe, UserSubscriptionsSecrets>,
-        u8,
-        u64,
-        u64,
-        u8,
-        u128,
-        u128,
-    ) {
-        let config = config_ctxt.to_arcis();
-        let stake = stake_ctxt.to_arcis();
-        let mut subscriptions = subscriptions_ctxt.to_arcis();
-        let service = service_ctxt.to_arcis();
-
-        let (converted_now, now_ok) = to_i64_checked(now_ts);
-        let now_i64 = converted_now;
-        let (converted_period, period_ok) = to_i64_checked(billing_period_seconds);
-        let mut billing_period = converted_period;
-
-        let mut success = now_ok;
-        if !period_ok || billing_period <= 0 {
-            success = false;
-            billing_period = 0;
-        }
-
-        if success {
-            if !subscriptions.refresh(now_i64) {
-                success = false;
-            }
-        } else {
-            let _ = subscriptions.refresh(now_i64);
-        }
-        let refreshed_state = subscriptions;
-
-        if success {
-            if service.id != expected_service_id {
-                success = false;
-            }
-            if service.monthly_price_usdc == 0 {
-                success = false;
-            }
-            if !subscriptions.paypal_configured {
-                success = false;
-            }
-            if subscriptions.has_active_or_pending(service.id) {
-                success = false;
-            }
-        }
-
-        let mut committed = 0u64;
-        let mut required_commitment = 0u64;
-        if success {
-            committed = subscriptions.total_active_commitment;
-            let pending = subscriptions.total_pending_commitment;
-            if committed > u64::MAX - pending {
-                success = false;
-            } else {
-                committed = committed + pending;
-                if committed > u64::MAX - service.monthly_price_usdc {
-                    success = false;
-                } else {
-                    required_commitment = committed + service.monthly_price_usdc;
-                }
-            }
-        }
-
-        if success {
-            let monthly_budget = compute_monthly_budget(stake.total_principal, config.apy_bps);
-            if monthly_budget == 0 || required_commitment > monthly_budget {
-                success = false;
-            }
-        }
-
-        let mut final_subscriptions = subscriptions;
-        let mut subscription_id_out = 0u64;
-        let mut service_id_out = 0u64;
-
-        if success {
-            let slot_index = final_subscriptions.allocate_slot_index();
-            if slot_index == MAX_USER_SUBSCRIPTIONS {
-                success = false;
-            } else {
-                let next_id = final_subscriptions.next_subscription_id;
-                let mut incremented_id = next_id;
-                let mut next_billing_ts = now_i64;
-                let mut new_active = final_subscriptions.total_active_commitment;
-
-                if next_id == u64::MAX {
-                    success = false;
-                } else if billing_period > 0 && now_i64 > i64::MAX - billing_period {
-                    success = false;
-                } else if new_active > u64::MAX - service.monthly_price_usdc {
-                    success = false;
-                } else {
-                    incremented_id = next_id + 1;
-                    next_billing_ts = now_i64 + billing_period;
-                    new_active = new_active + service.monthly_price_usdc;
-                }
-
-                if !success || next_billing_ts < 0 {
-                    success = false;
-                } else {
-                    let slot_ref = &mut final_subscriptions.subscriptions[slot_index];
-                    slot_ref.id = next_id;
-                    slot_ref.service_id = service.id;
-                    slot_ref.monthly_price_usdc = service.monthly_price_usdc;
-                    slot_ref.started_at = now_i64;
-                    slot_ref.last_payment_ts = now_i64;
-                    slot_ref.next_billing_ts = next_billing_ts;
-                    slot_ref.pending_until_ts = 0;
-                    slot_ref.status = SUB_STATUS_ACTIVE;
-                    slot_ref.initial_payment_recorded = false;
-
-                    final_subscriptions.next_subscription_id = incremented_id;
-                    final_subscriptions.total_active_commitment = new_active;
-
-                    subscription_id_out = next_id;
-                    service_id_out = service.id;
-                }
-            }
-        }
-
-        if !success {
-            final_subscriptions = refreshed_state;
-            subscription_id_out = 0;
-            service_id_out = 0;
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-        let recipient_type_out = final_subscriptions.paypal_recipient_type;
-        let receiver_hash_low_out = final_subscriptions.paypal_receiver_hash_low;
-        let receiver_hash_high_out = final_subscriptions.paypal_receiver_hash_high;
-
-        let public_success_flag = success_flag.reveal();
-        let public_subscription_id = subscription_id_out.reveal();
-        let public_service_id = service_id_out.reveal();
-        let public_recipient_type = recipient_type_out.reveal();
-        let public_receiver_hash_low = receiver_hash_low_out.reveal();
-        let public_receiver_hash_high = receiver_hash_high_out.reveal();
 
         (
             config_ctxt.owner.from_arcis(config),
             stake_ctxt.owner.from_arcis(stake),
-            subscriptions_ctxt.owner.from_arcis(final_subscriptions),
-            public_success_flag,
-            public_subscription_id,
-            public_service_id,
-            public_recipient_type,
-            public_receiver_hash_low,
-            public_receiver_hash_high,
+            amount.reveal(),
+        )
+    }
+
+    #[instruction]
+    pub fn subscribe_service_subly(
+        summary_ctxt: Enc<Mxe, UserSummarySecrets>,
+        contract_ctxt: Enc<Mxe, SubscriptionContractSecrets>,
+        service_ctxt: Enc<Mxe, ServiceSecrets>,
+        input: SubscribeInput,
+    ) -> (
+        Enc<Mxe, UserSummarySecrets>,
+        Enc<Mxe, SubscriptionContractSecrets>,
+        u8,
+    ) {
+        let mut summary = summary_ctxt.to_arcis();
+        let mut contract = contract_ctxt.to_arcis();
+        let service = service_ctxt.to_arcis();
+
+        let now = input.now_ts as i64;
+
+        let mut success = 0u8;
+        if contract.status == STATUS_UNUSED || contract.status == STATUS_CANCELLED {
+            contract.service_hash_low = service.service_hash_low;
+            contract.service_hash_high = service.service_hash_high;
+            contract.monthly_price_usdc = service.monthly_price_usdc;
+            contract.status = STATUS_ACTIVE;
+            contract.started_at = now;
+            contract.last_payment_ts = now;
+            contract.next_billing_ts = now + (service.billing_interval_secs as i64);
+            contract.pending_until_ts = 0;
+            contract.billing_interval_secs = service.billing_interval_secs;
+
+            summary.active_commitment =
+                saturating_add(summary.active_commitment, service.monthly_price_usdc);
+            success = 1;
+        }
+
+        (
+            summary_ctxt.owner.from_arcis(summary),
+            contract_ctxt.owner.from_arcis(contract),
+            success.reveal(),
         )
     }
 
     #[instruction]
     pub fn unsubscribe_service_subly(
-        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
-        subscription_id: u64,
-        now_ts: u64,
-        billing_period_seconds: u64,
-    ) -> (Enc<Mxe, UserSubscriptionsSecrets>, u8, u64, u64, u64, u64) {
-        let mut subscriptions = subscriptions_ctxt.to_arcis();
-        let (converted_now, now_ok) = to_i64_checked(now_ts);
-        let now_i64 = converted_now;
-        let (converted_period, period_ok) = to_i64_checked(billing_period_seconds);
-        let mut billing_period = converted_period;
+        summary_ctxt: Enc<Mxe, UserSummarySecrets>,
+        contract_ctxt: Enc<Mxe, SubscriptionContractSecrets>,
+        input: UnsubscribeInput,
+    ) -> (
+        Enc<Mxe, UserSummarySecrets>,
+        Enc<Mxe, SubscriptionContractSecrets>,
+        u8,
+    ) {
+        let mut summary = summary_ctxt.to_arcis();
+        let mut contract = contract_ctxt.to_arcis();
+        let now = input.now_ts as i64;
 
-        let mut success = now_ok;
-        if !period_ok || billing_period <= 0 {
-            success = false;
-            billing_period = 0;
+        let mut success = 0u8;
+        if contract.status == STATUS_ACTIVE {
+            summary.active_commitment =
+                saturating_sub(summary.active_commitment, contract.monthly_price_usdc);
+            summary.pending_commitment =
+                saturating_add(summary.pending_commitment, contract.monthly_price_usdc);
+            contract.status = STATUS_CANCELLED;
+            contract.pending_until_ts = now;
+            success = 1;
         }
-
-        if success {
-            if !subscriptions.refresh(now_i64) {
-                success = false;
-            }
-        } else {
-            let _ = subscriptions.refresh(now_i64);
-        }
-        let refreshed_state = subscriptions;
-
-        let mut service_id_out = 0u64;
-        let mut monthly_price_out = 0u64;
-        let mut pending_until_out = 0u64;
-
-        if success {
-            let subscription_index = subscriptions.find_subscription_index(subscription_id);
-            if subscription_index == MAX_USER_SUBSCRIPTIONS {
-                success = false;
-            } else {
-                let snapshot = subscriptions.subscriptions[subscription_index];
-                if snapshot.status != SUB_STATUS_ACTIVE {
-                    success = false;
-                } else {
-                    service_id_out = snapshot.service_id;
-                    monthly_price_out = snapshot.monthly_price_usdc;
-
-                    let mut new_active = subscriptions.total_active_commitment;
-                    let mut new_pending = subscriptions.total_pending_commitment;
-                    if new_active < snapshot.monthly_price_usdc {
-                        success = false;
-                    } else if new_pending > u64::MAX - snapshot.monthly_price_usdc {
-                        success = false;
-                    } else {
-                        new_active = new_active - snapshot.monthly_price_usdc;
-                        new_pending = new_pending + snapshot.monthly_price_usdc;
-                    }
-
-                    let mut pending_until_ts = snapshot.next_billing_ts;
-                    if pending_until_ts <= now_i64 {
-                        if billing_period > 0 && now_i64 > i64::MAX - billing_period {
-                            success = false;
-                        } else {
-                            pending_until_ts = now_i64 + billing_period;
-                        }
-                    }
-
-                    if success {
-                        if pending_until_ts < 0 {
-                            success = false;
-                        } else {
-                            let slot_ref = &mut subscriptions.subscriptions[subscription_index];
-                            slot_ref.status = SUB_STATUS_PENDING;
-                            slot_ref.pending_until_ts = pending_until_ts;
-
-                            subscriptions.total_active_commitment = new_active;
-                            subscriptions.total_pending_commitment = new_pending;
-                            pending_until_out = pending_until_ts as u64;
-                        }
-                    }
-                }
-            }
-        }
-
-        if !success {
-            subscriptions = refreshed_state;
-            service_id_out = 0;
-            monthly_price_out = 0;
-            pending_until_out = 0;
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-        let public_success = success_flag.reveal();
-        let public_service_id = service_id_out.reveal();
-        let public_monthly_price = monthly_price_out.reveal();
-        let public_pending_until = pending_until_out.reveal();
 
         (
-            subscriptions_ctxt.owner.from_arcis(subscriptions),
-            public_success,
-            subscription_id,
-            public_service_id,
-            public_monthly_price,
-            public_pending_until,
+            summary_ctxt.owner.from_arcis(summary),
+            contract_ctxt.owner.from_arcis(contract),
+            success.reveal(),
         )
     }
 
     #[instruction]
     pub fn record_subscription_payment_subly(
-        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
-        subscription_id: u64,
-        paid_ts: u64,
-        billing_period_seconds: u64,
+        summary_ctxt: Enc<Mxe, UserSummarySecrets>,
+        contract_ctxt: Enc<Mxe, SubscriptionContractSecrets>,
+        input: PaymentInput,
     ) -> (
-        Enc<Mxe, UserSubscriptionsSecrets>,
+        Enc<Mxe, UserSummarySecrets>,
+        Enc<Mxe, SubscriptionContractSecrets>,
         u8,
-        u64,
-        u64,
-        u64,
-        u8,
-        u64,
-        u8,
-        u64,
     ) {
-        let mut subscriptions = subscriptions_ctxt.to_arcis();
+        let mut summary = summary_ctxt.to_arcis();
+        let mut contract = contract_ctxt.to_arcis();
 
-        let (paid_i64, paid_ok) = to_i64_checked(paid_ts);
-        let (period_i64_raw, period_ok) = to_i64_checked(billing_period_seconds);
+        let mut success = 0u8;
+        let payment_ts = input.payment_ts as i64;
+        if contract.status == STATUS_ACTIVE {
+            summary.total_paid_amount =
+                saturating_add(summary.total_paid_amount, contract.monthly_price_usdc);
+            summary.pending_commitment =
+                saturating_sub(summary.pending_commitment, contract.monthly_price_usdc);
 
-        let mut success = paid_ok && period_ok;
-        let mut period_i64 = period_i64_raw;
-        if success {
-            if period_i64 <= 0 {
-                success = false;
-                period_i64 = 0;
-            }
-        } else {
-            period_i64 = 0;
+            contract.last_payment_ts = payment_ts;
+            contract.next_billing_ts = payment_ts + (contract.billing_interval_secs as i64);
+            contract.pending_until_ts = 0;
+            success = 1;
         }
-
-        if success {
-            if !subscriptions.refresh(paid_i64) {
-                success = false;
-            }
-        } else {
-            let _ = subscriptions.refresh(paid_i64);
-        }
-        let refreshed_state = subscriptions;
-
-        let mut service_id_out = 0u64;
-        let mut monthly_price_out = 0u64;
-        let mut status_code_out: u8 = SUB_STATUS_UNUSED;
-        let mut next_billing_out: u64 = 0;
-        let mut initial_flag_out: u8 = 0;
-
-        if success {
-            let subscription_index = subscriptions.find_subscription_index(subscription_id);
-            if subscription_index == MAX_USER_SUBSCRIPTIONS {
-                success = false;
-            } else {
-                let slot_ref = &mut subscriptions.subscriptions[subscription_index];
-                service_id_out = slot_ref.service_id;
-                monthly_price_out = slot_ref.monthly_price_usdc;
-
-                let status = slot_ref.status;
-                if status != SUB_STATUS_ACTIVE && status != SUB_STATUS_PENDING {
-                    success = false;
-                } else {
-                    if !slot_ref.initial_payment_recorded {
-                        slot_ref.initial_payment_recorded = true;
-                        slot_ref.last_payment_ts = paid_i64;
-                        status_code_out = slot_ref.status;
-                    } else if status == SUB_STATUS_ACTIVE {
-                        slot_ref.last_payment_ts = paid_i64;
-
-                        let next_due = slot_ref.next_billing_ts;
-                        if next_due < 0 {
-                            success = false;
-                        } else {
-                            let (advanced_due, ok) =
-                                advance_due_after(next_due, paid_i64, period_i64);
-                            if ok {
-                                slot_ref.next_billing_ts = advanced_due;
-                                status_code_out = SUB_STATUS_ACTIVE;
-                            } else {
-                                success = false;
-                            }
-                        }
-                    } else {
-                        slot_ref.last_payment_ts = paid_i64;
-                        if subscriptions.total_pending_commitment < slot_ref.monthly_price_usdc {
-                            success = false;
-                        } else {
-                            subscriptions.total_pending_commitment = subscriptions
-                                .total_pending_commitment
-                                - slot_ref.monthly_price_usdc;
-                            slot_ref.status = SUB_STATUS_CANCELLED;
-                            slot_ref.pending_until_ts = 0;
-                            slot_ref.next_billing_ts = 0;
-                            status_code_out = SUB_STATUS_CANCELLED;
-                        }
-                    }
-
-                    if success {
-                        if slot_ref.next_billing_ts >= 0 {
-                            next_billing_out = slot_ref.next_billing_ts as u64;
-                        } else {
-                            next_billing_out = 0;
-                        }
-                        initial_flag_out = if slot_ref.initial_payment_recorded {
-                            1
-                        } else {
-                            0
-                        };
-                    }
-                }
-            }
-        }
-
-        if !success {
-            subscriptions = refreshed_state;
-            service_id_out = 0;
-            monthly_price_out = 0;
-            status_code_out = SUB_STATUS_UNUSED;
-            next_billing_out = 0;
-            initial_flag_out = 0;
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-        let public_success = success_flag.reveal();
-        let public_subscription_id = subscription_id.reveal();
-        let public_service_id = service_id_out.reveal();
-        let public_monthly_price = monthly_price_out.reveal();
-        let public_status = status_code_out.reveal();
-        let public_next_billing = next_billing_out.reveal();
-        let public_initial_flag = initial_flag_out.reveal();
-
-        let public_paid_ts = paid_ts.reveal();
 
         (
-            subscriptions_ctxt.owner.from_arcis(subscriptions),
-            public_success,
-            public_subscription_id,
-            public_service_id,
-            public_monthly_price,
-            public_status,
-            public_next_billing,
-            public_initial_flag,
-            public_paid_ts,
+            summary_ctxt.owner.from_arcis(summary),
+            contract_ctxt.owner.from_arcis(contract),
+            success.reveal(),
         )
     }
 
     #[instruction]
     pub fn find_due_subscriptions_subly(
-        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
-        now_ts: u64,
-        look_ahead_seconds: u64,
-    ) -> (
-        Enc<Mxe, UserSubscriptionsSecrets>,
-        u8,
-        u8,
-        u64,
-        u64,
-        u64,
-        u64,
-        u8,
-        u64,
-        u64,
-        u64,
-        u64,
-        u8,
-        u64,
-        u64,
-        u64,
-        u64,
-        u8,
-        u64,
-        u64,
-        u64,
-        u64,
-        u8,
-        u8,
-        u128,
-        u128,
-    ) {
-        let mut subscriptions = subscriptions_ctxt.to_arcis();
+        contract_ctxt: Enc<Mxe, SubscriptionContractSecrets>,
+        input: DueCheckInput,
+    ) -> (Enc<Mxe, SubscriptionContractSecrets>, u8) {
+        let mut contract = contract_ctxt.to_arcis();
+        let now = input.now_ts as i64;
 
-        let (now_i64, now_ok) = to_i64_checked(now_ts);
-        let (look_i64_raw, look_ok) = to_i64_checked(look_ahead_seconds);
-
-        let mut success = now_ok && look_ok;
-        let mut look_i64 = look_i64_raw;
-        if success {
-            if look_i64 < 0 {
-                success = false;
-                look_i64 = 0;
-            }
+        let due = if contract.status == STATUS_ACTIVE && now >= contract.next_billing_ts {
+            contract.pending_until_ts = now;
+            1u8
         } else {
-            look_i64 = 0;
-        }
-
-        let mut upper_bound = now_i64;
-        if success {
-            if now_i64 > i64::MAX - look_i64 {
-                success = false;
-            } else {
-                upper_bound = now_i64 + look_i64;
-            }
-        }
-
-        if success {
-            if !subscriptions.refresh(now_i64) {
-                success = false;
-            }
-        } else {
-            let _ = subscriptions.refresh(now_i64);
-        }
-        let refreshed_state = subscriptions;
-
-        let mut due_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
-        let mut due_service_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
-        let mut due_prices = [0u64; MAX_USER_SUBSCRIPTIONS];
-        let mut due_ts_out = [0u64; MAX_USER_SUBSCRIPTIONS];
-        let mut due_initial_flags = [0u8; MAX_USER_SUBSCRIPTIONS];
-        let mut due_count: usize = 0;
-
-        if success && subscriptions.paypal_configured {
-            for idx in 0..MAX_USER_SUBSCRIPTIONS {
-                let slot = subscriptions.subscriptions[idx];
-                let can_collect = due_count < MAX_USER_SUBSCRIPTIONS;
-                if can_collect {
-                    let is_active = slot.status == SUB_STATUS_ACTIVE;
-                    let mut is_due = 0u8;
-                    if is_active {
-                        if !slot.initial_payment_recorded {
-                            is_due = 1;
-                        } else if slot.next_billing_ts <= upper_bound {
-                            is_due = 1;
-                        }
-                    }
-                    if is_due == 1 {
-                        due_ids[due_count] = slot.id;
-                        due_service_ids[due_count] = slot.service_id;
-                        due_prices[due_count] = slot.monthly_price_usdc;
-                        if slot.next_billing_ts >= 0 {
-                            due_ts_out[due_count] = slot.next_billing_ts as u64;
-                        } else {
-                            due_ts_out[due_count] = 0;
-                        }
-                        due_initial_flags[due_count] =
-                            if slot.initial_payment_recorded { 1 } else { 0 };
-                        due_count = due_count + 1;
-                    }
-                }
-            }
-        }
-
-        if !success {
-            subscriptions = refreshed_state;
-            due_count = 0;
-            due_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
-            due_service_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
-            due_prices = [0u64; MAX_USER_SUBSCRIPTIONS];
-            due_ts_out = [0u64; MAX_USER_SUBSCRIPTIONS];
-            due_initial_flags = [0u8; MAX_USER_SUBSCRIPTIONS];
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-        let public_success = success_flag.reveal();
-        let due_count_u8: u8 = if due_count > MAX_USER_SUBSCRIPTIONS {
-            MAX_USER_SUBSCRIPTIONS as u8
-        } else {
-            due_count as u8
+            0u8
         };
-        let public_due_count = due_count_u8.reveal();
 
-        let public_sub_id_0 = due_ids[0].reveal();
-        let public_service_id_0 = due_service_ids[0].reveal();
-        let public_price_0 = due_prices[0].reveal();
-        let public_due_ts_0 = due_ts_out[0].reveal();
-        let public_initial_0 = due_initial_flags[0].reveal();
-
-        let public_sub_id_1 = due_ids[1].reveal();
-        let public_service_id_1 = due_service_ids[1].reveal();
-        let public_price_1 = due_prices[1].reveal();
-        let public_due_ts_1 = due_ts_out[1].reveal();
-        let public_initial_1 = due_initial_flags[1].reveal();
-
-        let public_sub_id_2 = due_ids[2].reveal();
-        let public_service_id_2 = due_service_ids[2].reveal();
-        let public_price_2 = due_prices[2].reveal();
-        let public_due_ts_2 = due_ts_out[2].reveal();
-        let public_initial_2 = due_initial_flags[2].reveal();
-
-        let public_sub_id_3 = due_ids[3].reveal();
-        let public_service_id_3 = due_service_ids[3].reveal();
-        let public_price_3 = due_prices[3].reveal();
-        let public_due_ts_3 = due_ts_out[3].reveal();
-        let public_initial_3 = due_initial_flags[3].reveal();
-
-        let recipient_type_out = subscriptions.paypal_recipient_type;
-        let receiver_hash_low_out = subscriptions.paypal_receiver_hash_low;
-        let receiver_hash_high_out = subscriptions.paypal_receiver_hash_high;
-
-        let public_recipient_type = recipient_type_out.reveal();
-        let public_receiver_hash_low = receiver_hash_low_out.reveal();
-        let public_receiver_hash_high = receiver_hash_high_out.reveal();
-
-        (
-            subscriptions_ctxt.owner.from_arcis(subscriptions),
-            public_success,
-            public_due_count,
-            public_sub_id_0,
-            public_service_id_0,
-            public_price_0,
-            public_due_ts_0,
-            public_initial_0,
-            public_sub_id_1,
-            public_service_id_1,
-            public_price_1,
-            public_due_ts_1,
-            public_initial_1,
-            public_sub_id_2,
-            public_service_id_2,
-            public_price_2,
-            public_due_ts_2,
-            public_initial_2,
-            public_sub_id_3,
-            public_service_id_3,
-            public_price_3,
-            public_due_ts_3,
-            public_initial_3,
-            public_recipient_type,
-            public_receiver_hash_low,
-            public_receiver_hash_high,
-        )
-    }
-
-    #[instruction]
-    pub fn get_paypal_recipient_subly(
-        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
-    ) -> (Enc<Mxe, UserSubscriptionsSecrets>, u8, u8, u128, u128) {
-        let subscriptions = subscriptions_ctxt.to_arcis();
-        let configured_flag: u8 = if subscriptions.paypal_configured {
-            1
-        } else {
-            0
-        };
-        let recipient_type = subscriptions.paypal_recipient_type;
-        let receiver_low = subscriptions.paypal_receiver_hash_low;
-        let receiver_high = subscriptions.paypal_receiver_hash_high;
-
-        (
-            subscriptions_ctxt.owner.from_arcis(subscriptions),
-            configured_flag.reveal(),
-            recipient_type.reveal(),
-            receiver_low.reveal(),
-            receiver_high.reveal(),
-        )
-    }
-
-    #[instruction]
-    pub fn get_subscription_services_subly(
-        registry_ctxt: Enc<Mxe, RegistrySecrets>,
-    ) -> (Enc<Mxe, RegistrySecrets>, u32, u64, u128, u128) {
-        let registry = registry_ctxt.to_arcis();
-        let next_id = registry.next_service_id;
-        let count = registry.service_count;
-        let root_low = registry.services_root_low;
-        let root_high = registry.services_root_high;
-
-        (
-            registry_ctxt.owner.from_arcis(registry),
-            count.reveal(),
-            next_id.reveal(),
-            root_low.reveal(),
-            root_high.reveal(),
-        )
-    }
-
-    #[instruction]
-    pub fn get_user_stake_subly(
-        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
-    ) -> (
-        Enc<Mxe, UserStakeSecrets>,
-        u64,
-        u8,
-        [u64; MAX_STAKE_ENTRIES],
-        [u64; MAX_STAKE_ENTRIES],
-        [i64; MAX_STAKE_ENTRIES],
-        [i64; MAX_STAKE_ENTRIES],
-        [i64; MAX_STAKE_ENTRIES],
-        [u64; MAX_STAKE_ENTRIES],
-        [u64; MAX_STAKE_ENTRIES],
-        [u64; MAX_STAKE_ENTRIES],
-    ) {
-        let stake = stake_ctxt.to_arcis();
-
-        let mut tranche_ids = [0u64; MAX_STAKE_ENTRIES];
-        let mut principals = [0u64; MAX_STAKE_ENTRIES];
-        let mut deposited_at = [0i64; MAX_STAKE_ENTRIES];
-        let mut lock_end_ts = [0i64; MAX_STAKE_ENTRIES];
-        let mut lock_durations = [0i64; MAX_STAKE_ENTRIES];
-        let mut claimed_operator = [0u64; MAX_STAKE_ENTRIES];
-        let mut claimed_user = [0u64; MAX_STAKE_ENTRIES];
-        let mut unrealized = [0u64; MAX_STAKE_ENTRIES];
-
-        for idx in 0..MAX_STAKE_ENTRIES {
-            let entry = stake.entries[idx];
-            tranche_ids[idx] = entry.tranche_id.reveal();
-            principals[idx] = entry.principal.reveal();
-            deposited_at[idx] = entry.deposited_at.reveal();
-            lock_end_ts[idx] = entry.lock_end_ts.reveal();
-            lock_durations[idx] = entry.lock_duration.reveal();
-            claimed_operator[idx] = entry.claimed_operator.reveal();
-            claimed_user[idx] = entry.claimed_user.reveal();
-            unrealized[idx] = entry.unrealized_yield.reveal();
-        }
-
-        (
-            stake_ctxt.owner.from_arcis(stake),
-            stake.total_principal.reveal(),
-            stake.entry_count.reveal(),
-            tranche_ids,
-            principals,
-            deposited_at,
-            lock_end_ts,
-            lock_durations,
-            claimed_operator,
-            claimed_user,
-            unrealized,
-        )
-    }
-
-    #[instruction]
-    pub fn get_user_subscriptions_subly(
-        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
-        now_ts: u64,
-    ) -> (
-        Enc<Mxe, UserSubscriptionsSecrets>,
-        u8,
-        u64,
-        u64,
-        [u64; MAX_USER_SUBSCRIPTIONS],
-        [u64; MAX_USER_SUBSCRIPTIONS],
-        [u64; MAX_USER_SUBSCRIPTIONS],
-        [i64; MAX_USER_SUBSCRIPTIONS],
-        [i64; MAX_USER_SUBSCRIPTIONS],
-        [i64; MAX_USER_SUBSCRIPTIONS],
-        [i64; MAX_USER_SUBSCRIPTIONS],
-        [u8; MAX_USER_SUBSCRIPTIONS],
-        [u8; MAX_USER_SUBSCRIPTIONS],
-    ) {
-        let mut subscriptions = subscriptions_ctxt.to_arcis();
-        let original_state = subscriptions;
-
-        let (now_i64, now_ok) = to_i64_checked(now_ts);
-        let mut success = now_ok;
-        if success {
-            if !subscriptions.refresh(now_i64) {
-                success = false;
-            }
-        } else {
-            let _ = subscriptions.refresh(now_i64);
-        }
-
-        if !success {
-            subscriptions = original_state;
-        }
-
-        let mut subscription_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
-        let mut service_ids = [0u64; MAX_USER_SUBSCRIPTIONS];
-        let mut prices = [0u64; MAX_USER_SUBSCRIPTIONS];
-        let mut started_at = [0i64; MAX_USER_SUBSCRIPTIONS];
-        let mut last_payment = [0i64; MAX_USER_SUBSCRIPTIONS];
-        let mut next_billing = [0i64; MAX_USER_SUBSCRIPTIONS];
-        let mut pending_until = [0i64; MAX_USER_SUBSCRIPTIONS];
-        let mut status_codes = [0u8; MAX_USER_SUBSCRIPTIONS];
-        let mut initial_flags = [0u8; MAX_USER_SUBSCRIPTIONS];
-
-        for idx in 0..MAX_USER_SUBSCRIPTIONS {
-            let slot = subscriptions.subscriptions[idx];
-            subscription_ids[idx] = slot.id.reveal();
-            service_ids[idx] = slot.service_id.reveal();
-            prices[idx] = slot.monthly_price_usdc.reveal();
-            started_at[idx] = slot.started_at.reveal();
-            last_payment[idx] = slot.last_payment_ts.reveal();
-            next_billing[idx] = slot.next_billing_ts.reveal();
-            pending_until[idx] = slot.pending_until_ts.reveal();
-            status_codes[idx] = slot.status.reveal();
-            let initial_flag = if slot.initial_payment_recorded {
-                1u8
-            } else {
-                0u8
-            };
-            initial_flags[idx] = initial_flag.reveal();
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-
-        (
-            subscriptions_ctxt.owner.from_arcis(subscriptions),
-            success_flag.reveal(),
-            subscriptions.total_active_commitment.reveal(),
-            subscriptions.total_pending_commitment.reveal(),
-            subscription_ids,
-            service_ids,
-            prices,
-            started_at,
-            last_payment,
-            next_billing,
-            pending_until,
-            status_codes,
-            initial_flags,
-        )
-    }
-
-    #[instruction]
-    pub fn get_user_available_services_subly(
-        config_ctxt: Enc<Mxe, ConfigSecrets>,
-        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
-        subscriptions_ctxt: Enc<Mxe, UserSubscriptionsSecrets>,
-        now_ts: u64,
-    ) -> (
-        Enc<Mxe, ConfigSecrets>,
-        Enc<Mxe, UserStakeSecrets>,
-        Enc<Mxe, UserSubscriptionsSecrets>,
-        u8,
-        u64,
-        u16,
-        u64,
-        u64,
-        u64,
-        u64,
-    ) {
-        let config = config_ctxt.to_arcis();
-        let stake = stake_ctxt.to_arcis();
-        let mut subscriptions = subscriptions_ctxt.to_arcis();
-        let original_subscriptions = subscriptions;
-
-        let (now_i64, now_ok) = to_i64_checked(now_ts);
-        let mut success = now_ok;
-        if success {
-            if !subscriptions.refresh(now_i64) {
-                success = false;
-            }
-        } else {
-            let _ = subscriptions.refresh(now_i64);
-        }
-
-        if !success {
-            subscriptions = original_subscriptions;
-        }
-
-        let monthly_budget = compute_monthly_budget(stake.total_principal, config.apy_bps);
-        let active_commitment = subscriptions.total_active_commitment;
-        let pending_commitment = subscriptions.total_pending_commitment;
-        let committed_total = active_commitment + pending_commitment;
-        let mut available_budget: u64 = 0;
-        if monthly_budget >= committed_total {
-            available_budget = monthly_budget - committed_total;
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-
-        (
-            config_ctxt.owner.from_arcis(config),
-            stake_ctxt.owner.from_arcis(stake),
-            subscriptions_ctxt.owner.from_arcis(subscriptions),
-            success_flag.reveal(),
-            stake.total_principal.reveal(),
-            config.apy_bps.reveal(),
-            monthly_budget.reveal(),
-            active_commitment.reveal(),
-            pending_commitment.reveal(),
-            available_budget.reveal(),
-        )
-    }
-
-    #[instruction]
-    #[allow(clippy::too_many_arguments)]
-    pub fn register_subscription_service_subly(
-        registry_ctxt: Enc<Mxe, RegistrySecrets>,
-        service_ctxt: Enc<Mxe, ServiceSecrets>,
-        creator_low: u128,
-        creator_high: u128,
-        name_hash_low: u128,
-        name_hash_high: u128,
-        details_hash_low: u128,
-        details_hash_high: u128,
-        logo_hash_low: u128,
-        logo_hash_high: u128,
-        provider_hash_low: u128,
-        provider_hash_high: u128,
-        monthly_price: u64,
-        created_at: u64,
-    ) -> (
-        Enc<Mxe, RegistrySecrets>,
-        Enc<Mxe, ServiceSecrets>,
-        u64,
-        u32,
-        u64,
-        u64,
-        u128,
-        u128,
-        u128,
-        u128,
-        u128,
-        u128,
-        u128,
-        u128,
-    ) {
-        let mut registry = registry_ctxt.to_arcis();
-        let mut service = service_ctxt.to_arcis();
-
-        let assigned_id = registry.next_service_id;
-        let created_at_i64 = created_at as i64;
-
-        let (digest_low, digest_high) = compute_service_digest(
-            assigned_id,
-            monthly_price,
-            creator_low,
-            creator_high,
-            name_hash_low,
-            name_hash_high,
-            details_hash_low,
-            details_hash_high,
-            logo_hash_low,
-            logo_hash_high,
-            provider_hash_low,
-            provider_hash_high,
-            created_at_i64,
-        );
-
-        let (root_low, root_high) = mix_service_root(
-            registry.services_root_low,
-            registry.services_root_high,
-            digest_low,
-            digest_high,
-            assigned_id,
-        );
-
-        registry.next_service_id = assigned_id + 1;
-        registry.service_count = registry.service_count + 1;
-        registry.services_root_low = root_low;
-        registry.services_root_high = root_high;
-
-        service.id = assigned_id;
-        service.monthly_price_usdc = monthly_price;
-        service.created_at = created_at_i64;
-        service.creator_low = creator_low;
-        service.creator_high = creator_high;
-        service.name_hash_low = name_hash_low;
-        service.name_hash_high = name_hash_high;
-        service.details_hash_low = details_hash_low;
-        service.details_hash_high = details_hash_high;
-        service.logo_hash_low = logo_hash_low;
-        service.logo_hash_high = logo_hash_high;
-        service.provider_hash_low = provider_hash_low;
-        service.provider_hash_high = provider_hash_high;
-
-        let updated_registry = registry_ctxt.owner.from_arcis(registry);
-        let updated_service = service_ctxt.owner.from_arcis(service);
-        let public_service_id = assigned_id.reveal();
-        let public_service_count = registry.service_count.reveal();
-
-        (
-            updated_registry,
-            updated_service,
-            public_service_id,
-            public_service_count,
-            monthly_price,
-            created_at,
-            name_hash_low,
-            name_hash_high,
-            details_hash_low,
-            details_hash_high,
-            logo_hash_low,
-            logo_hash_high,
-            provider_hash_low,
-            provider_hash_high,
-        )
-    }
-
-    #[instruction]
-    pub fn sync_yield_subly(
-        config_ctxt: Enc<Mxe, ConfigSecrets>,
-        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
-        now_ts: u64,
-    ) -> (
-        Enc<Mxe, ConfigSecrets>,
-        Enc<Mxe, UserStakeSecrets>,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u32,
-        u64,
-    ) {
-        let mut config = config_ctxt.to_arcis();
-        let mut stake = stake_ctxt.to_arcis();
-
-        let now = now_ts as i64;
-        accrue_config(&mut config, now);
-        sync_entries(&mut stake, config.acc_index, now);
-
-        let active_count = stake.entry_count as usize;
-        let mut total_unrealized: u64 = 0;
-        let mut total_generated: u64 = 0;
-        let mut operator_claimed: u64 = 0;
-        let mut user_claimed: u64 = 0;
-
-        for idx in 0..MAX_STAKE_ENTRIES {
-            let within_active = idx < active_count;
-            if within_active {
-                let entry = stake.entries[idx];
-                total_unrealized = total_unrealized + entry.unrealized_yield;
-                operator_claimed = operator_claimed + entry.claimed_operator;
-                user_claimed = user_claimed + entry.claimed_user;
-                let entry_generated =
-                    entry.unrealized_yield + entry.claimed_operator + entry.claimed_user;
-                total_generated = total_generated + entry_generated;
-            }
-        }
-
-        let final_config = config_ctxt.owner.from_arcis(config);
-        let final_stake = stake_ctxt.owner.from_arcis(stake);
-        let public_total_principal = stake.total_principal.reveal();
-        let public_total_unrealized = total_unrealized.reveal();
-        let public_total_generated = total_generated.reveal();
-        let public_operator_claimed = operator_claimed.reveal();
-        let public_user_claimed = user_claimed.reveal();
-        let tranche_count_u32 = stake.entry_count as u32;
-        let public_tranche_count = tranche_count_u32.reveal();
-        let last_updated_u64 = if stake.last_updated_ts >= 0 {
-            stake.last_updated_ts as u64
-        } else {
-            0
-        };
-        let public_last_updated = last_updated_u64.reveal();
-
-        (
-            final_config,
-            final_stake,
-            public_total_principal,
-            public_total_unrealized,
-            public_total_generated,
-            public_operator_claimed,
-            public_user_claimed,
-            public_tranche_count,
-            public_last_updated,
-        )
-    }
-
-    #[instruction]
-    pub fn claim_user_subly(
-        config_ctxt: Enc<Mxe, ConfigSecrets>,
-        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
-        requested_amount: u64,
-        now_ts: u64,
-    ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, UserStakeSecrets>, u8, u64) {
-        let mut config = config_ctxt.to_arcis();
-        let mut stake = stake_ctxt.to_arcis();
-        let original_config = config;
-        let original_stake = stake;
-
-        let (now_i64, now_ok) = to_i64_checked(now_ts);
-        let mut success = now_ok;
-        let mut claimed_amount: u64 = 0;
-
-        if success {
-            accrue_config(&mut config, now_i64);
-            sync_entries(&mut stake, config.acc_index, now_i64);
-
-            let mut available_acc: u128 = 0;
-            let active_count = stake.entry_count as usize;
-            for idx in 0..MAX_STAKE_ENTRIES {
-                if idx < active_count {
-                    let entry = stake.entries[idx];
-                    if now_i64 >= entry.lock_end_ts {
-                        available_acc = available_acc + entry.unrealized_yield as u128;
-                    }
-                }
-            }
-
-            if available_acc > u64::MAX as u128 {
-                success = false;
-            } else {
-                let available = available_acc as u64;
-                let mut desired = requested_amount;
-                if desired == 0 {
-                    desired = available;
-                } else if desired > available {
-                    desired = available;
-                }
-
-                if desired == 0 {
-                    success = false;
-                } else if config.reward_pool < desired {
-                    success = false;
-                } else {
-                    let mut remaining = desired;
-                    let mut overflow = false;
-                    for idx in 0..MAX_STAKE_ENTRIES {
-                        if idx < active_count && remaining > 0 {
-                            let entry = &mut stake.entries[idx];
-                            if now_i64 >= entry.lock_end_ts {
-                                let available_entry = entry.unrealized_yield;
-                                let take = if available_entry > remaining {
-                                    remaining
-                                } else {
-                                    available_entry
-                                };
-                                if take > 0 {
-                                    entry.unrealized_yield = entry.unrealized_yield - take;
-                                    if entry.claimed_user > u64::MAX - take {
-                                        overflow = true;
-                                    } else {
-                                        entry.claimed_user = entry.claimed_user + take;
-                                        remaining = remaining - take;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if overflow || remaining > 0 {
-                        success = false;
-                    } else {
-                        config.reward_pool = config.reward_pool - desired;
-                        claimed_amount = desired;
-                    }
-                }
-            }
-        }
-
-        if !success {
-            config = original_config;
-            stake = original_stake;
-            claimed_amount = 0;
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-
-        (
-            config_ctxt.owner.from_arcis(config),
-            stake_ctxt.owner.from_arcis(stake),
-            success_flag.reveal(),
-            claimed_amount.reveal(),
-        )
-    }
-
-    #[instruction]
-    pub fn claim_operator_subly(
-        config_ctxt: Enc<Mxe, ConfigSecrets>,
-        stake_ctxt: Enc<Mxe, UserStakeSecrets>,
-        requested_amount: u64,
-        now_ts: u64,
-    ) -> (Enc<Mxe, ConfigSecrets>, Enc<Mxe, UserStakeSecrets>, u8, u64) {
-        let mut config = config_ctxt.to_arcis();
-        let mut stake = stake_ctxt.to_arcis();
-        let original_config = config;
-        let original_stake = stake;
-
-        let (now_i64, now_ok) = to_i64_checked(now_ts);
-        let mut success = now_ok;
-        let mut claimed_amount: u64 = 0;
-
-        if success {
-            accrue_config(&mut config, now_i64);
-            sync_entries(&mut stake, config.acc_index, now_i64);
-
-            let mut available_acc: u128 = 0;
-            let active_count = stake.entry_count as usize;
-            for idx in 0..MAX_STAKE_ENTRIES {
-                if idx < active_count {
-                    let entry = stake.entries[idx];
-                    available_acc = available_acc + entry.unrealized_yield as u128;
-                }
-            }
-
-            if available_acc > u64::MAX as u128 {
-                success = false;
-            } else {
-                let available = available_acc as u64;
-                let mut desired = requested_amount;
-                if desired == 0 {
-                    desired = available;
-                } else if desired > available {
-                    desired = available;
-                }
-
-                if desired == 0 {
-                    success = false;
-                } else if config.reward_pool < desired {
-                    success = false;
-                } else {
-                    let mut remaining = desired;
-                    let mut overflow = false;
-                    for idx in 0..MAX_STAKE_ENTRIES {
-                        if idx < active_count && remaining > 0 {
-                            let entry = &mut stake.entries[idx];
-                            let available_entry = entry.unrealized_yield;
-                            let take = if available_entry > remaining {
-                                remaining
-                            } else {
-                                available_entry
-                            };
-                            if take > 0 {
-                                entry.unrealized_yield = entry.unrealized_yield - take;
-                                if entry.claimed_operator > u64::MAX - take {
-                                    overflow = true;
-                                } else {
-                                    entry.claimed_operator = entry.claimed_operator + take;
-                                    remaining = remaining - take;
-                                }
-                            }
-                        }
-                    }
-
-                    if overflow || remaining > 0 {
-                        success = false;
-                    } else {
-                        config.reward_pool = config.reward_pool - desired;
-                        claimed_amount = desired;
-                    }
-                }
-            }
-        }
-
-        if !success {
-            config = original_config;
-            stake = original_stake;
-            claimed_amount = 0;
-        }
-
-        let success_flag: u8 = if success { 1 } else { 0 };
-
-        (
-            config_ctxt.owner.from_arcis(config),
-            stake_ctxt.owner.from_arcis(stake),
-            success_flag.reveal(),
-            claimed_amount.reveal(),
-        )
-    }
-
-    fn advance_due_after(current_due: i64, paid_ts: i64, period: i64) -> (i64, bool) {
-        let mut success = true;
-        let mut output_due = 0i64;
-
-        if period <= 0 || current_due < 0 {
-            success = false;
-        } else if current_due > paid_ts {
-            output_due = current_due;
-        } else {
-            let diff = paid_ts - current_due;
-            let period_u128 = period as u128;
-            if period_u128 == 0 {
-                success = false;
-            } else {
-                let diff_u128 = diff as u128;
-                let increments_u128 = diff_u128 / period_u128 + 1;
-                let increments_i128 = increments_u128 as i128;
-                let period_i128 = period as i128;
-                let current_i128 = current_due as i128;
-                let added = increments_i128 * period_i128;
-                let candidate = current_i128 + added;
-                if candidate > i64::MAX as i128 {
-                    success = false;
-                } else {
-                    output_due = candidate as i64;
-                }
-            }
-        }
-
-        if success {
-            (output_due, true)
-        } else {
-            (0, false)
-        }
-    }
-
-    fn to_i64_checked(value: u64) -> (i64, bool) {
-        if value <= i64::MAX as u64 {
-            (value as i64, true)
-        } else {
-            (0, false)
-        }
-    }
-
-    fn compute_monthly_budget(total_principal: u64, apy_bps: u16) -> u64 {
-        if total_principal == 0 || apy_bps == 0 {
-            0
-        } else {
-            let annual =
-                (total_principal as u128) * (apy_bps as u128) / (BASIS_POINTS_DIVISOR as u128);
-            let monthly = annual / 12;
-            monthly as u64
-        }
-    }
-
-    fn populate_entry(
-        entry: &mut StakeEntrySecrets,
-        tranche_id: u64,
-        amount: u64,
-        now: i64,
-        lock_duration: i64,
-        acc_index: u128,
-    ) {
-        entry.tranche_id = tranche_id;
-        entry.principal = amount;
-        entry.deposited_at = now;
-        entry.lock_duration = lock_duration;
-        entry.lock_end_ts = now + lock_duration;
-        entry.start_acc_index = acc_index;
-        entry.last_acc_index = acc_index;
-        entry.claimed_operator = 0;
-        entry.claimed_user = 0;
-        entry.unrealized_yield = 0;
-    }
-
-    fn accrue_config(config: &mut ConfigSecrets, now: i64) {
-        if now > config.last_update_ts {
-            let elapsed = now - config.last_update_ts;
-            if elapsed > 0 && config.total_principal > 0 {
-                let elapsed_u64 = elapsed as u64;
-                if elapsed_u64 > 0 {
-                    let numerator = (config.apy_bps as u128) * (elapsed_u64 as u128) * INDEX_SCALE;
-                    let denominator = (BASIS_POINTS_DIVISOR as u128) * (SECONDS_PER_YEAR as u128);
-                    if denominator > 0 {
-                        let delta_index = numerator / denominator;
-                        config.acc_index = config.acc_index + delta_index;
-                    }
-                }
-            }
-            config.last_update_ts = now;
-        }
-    }
-
-    fn sync_entries(stake_data: &mut UserStakeSecrets, acc_index: u128, now: i64) {
-        for idx in 0..MAX_STAKE_ENTRIES {
-            let entry = &mut stake_data.entries[idx];
-            let mut should_update = true;
-            if entry.principal == 0 {
-                should_update = false;
-            }
-            if acc_index <= entry.last_acc_index {
-                should_update = false;
-            }
-            if should_update {
-                let delta_index = acc_index - entry.last_acc_index;
-                let accrual = (entry.principal as u128) * delta_index / INDEX_SCALE;
-                let accrual_u64 = accrual as u64;
-                entry.unrealized_yield = entry.unrealized_yield + accrual_u64;
-                entry.last_acc_index = acc_index;
-            }
-        }
-        stake_data.last_updated_ts = now;
-    }
-
-    fn compute_service_digest(
-        id: u64,
-        monthly_price: u64,
-        creator_low: u128,
-        creator_high: u128,
-        name_hash_low: u128,
-        name_hash_high: u128,
-        details_hash_low: u128,
-        details_hash_high: u128,
-        logo_hash_low: u128,
-        logo_hash_high: u128,
-        provider_hash_low: u128,
-        provider_hash_high: u128,
-        created_at: i64,
-    ) -> (u128, u128) {
-        let created_at_u128 = if created_at >= 0 {
-            created_at as u128
-        } else {
-            0
-        };
-        let mut digest_low =
-            creator_low + name_hash_low + details_hash_low + logo_hash_low + provider_hash_low;
-        digest_low = digest_low + (id as u128) + (monthly_price as u128) + created_at_u128;
-
-        let mut digest_high =
-            creator_high + name_hash_high + details_hash_high + logo_hash_high + provider_hash_high;
-        digest_high = digest_high
-            + ((id >> 32) as u128)
-            + ((monthly_price >> 32) as u128)
-            + (created_at_u128 >> 1);
-
-        (digest_low, digest_high)
-    }
-
-    fn mix_service_root(
-        current_low: u128,
-        current_high: u128,
-        digest_low: u128,
-        digest_high: u128,
-        index: u64,
-    ) -> (u128, u128) {
-        let digest_with_index = digest_low + (index as u128);
-        let new_low = current_low + digest_with_index;
-        let carry = if new_low < current_low { 1u128 } else { 0u128 };
-        let new_high = current_high + digest_high + carry;
-        (new_low, new_high)
+        (contract_ctxt.owner.from_arcis(contract), due.reveal())
     }
 }

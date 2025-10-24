@@ -17,14 +17,6 @@ pub struct RegisterPayPalRecipientArgs {
     pub receiver: String,
 }
 
-#[event]
-pub struct PayPalRecipientRegistered {
-    pub user: Pubkey,
-    pub recipient_type: String,
-    pub receiver_hash_low: u128,
-    pub receiver_hash_high: u128,
-}
-
 pub fn handler(
     ctx: Context<RegisterPaypalRecipient>,
     computation_offset: u64,
@@ -47,11 +39,6 @@ pub fn handler(
     {
         let user_subscriptions = &mut ctx.accounts.user_subscriptions;
         user_subscriptions.ensure_owner(user_key, ctx.bumps.user_subscriptions);
-        require_keys_eq!(
-            user_subscriptions.owner,
-            user_key,
-            ErrorCode::InvalidSubscriptionAccount
-        );
         require!(
             user_subscriptions.pending_computation_offset.is_none(),
             ErrorCode::PendingComputationInProgress
@@ -67,8 +54,10 @@ pub fn handler(
         Argument::PlaintextU128(nonce),
         Argument::Account(
             account_key,
-            UserSubscriptionsAccount::ENCRYPTED_STATE_OFFSET as u32,
-            UserSubscriptionsAccount::ENCRYPTED_STATE_LEN as u32,
+            (UserSubscriptionsAccount::ENCRYPTED_STATE_OFFSET + crate::subly::state::MXE_NONCE_LEN)
+                as u32,
+            (UserSubscriptionsAccount::ENCRYPTED_STATE_LEN - crate::subly::state::MXE_NONCE_LEN)
+                as u32,
         ),
         Argument::PlaintextU8(recipient_type_index),
         Argument::PlaintextU128(receiver_hash_low),
@@ -112,26 +101,16 @@ pub fn callback(
         field_0:
             RegisterPaypalRecipientSublyOutputStruct0 {
                 field_0: encrypted_state,
-                field_1: recipient_type_index,
-                field_2: receiver_hash_low,
-                field_3: receiver_hash_high,
+                field_1: success_flag,
             },
     } = match output {
         ComputationOutputs::Success(payload) => payload,
         ComputationOutputs::Failure => return Err(ErrorCode::AbortedComputation.into()),
     };
 
-    let recipient_type = PayPalRecipientType::from_index(recipient_type_index)
-        .ok_or(ErrorCode::InvalidPayPalRecipientType)?;
+    require!(success_flag > 0, ErrorCode::ComputationValidationFailed);
 
     user_subscriptions.encrypted_state = EncryptedState::from(encrypted_state);
-
-    emit!(PayPalRecipientRegistered {
-        user: user_subscriptions.owner,
-        recipient_type: recipient_type.as_str().to_string(),
-        receiver_hash_low,
-        receiver_hash_high,
-    });
 
     Ok(())
 }

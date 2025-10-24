@@ -3,15 +3,19 @@ use anchor_spl::token::{self, Transfer};
 use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::{Argument, CallbackAccount};
 
-use crate::subly::constants::{MAX_STAKE_ENTRIES, USER_POSITION_SEED};
+use crate::subly::constants::{lock_duration_for_index, USER_POSITION_SEED};
 use crate::subly::error::ErrorCode;
 use crate::subly::state::{EncryptedState, SublyConfig, UserStakeAccount};
 use crate::{Stake, StakeSublyCallback, StakeSublyOutput, StakeSublyOutputStruct0, ID};
 
-const CONFIG_CIPHERTEXT_OFFSET: u32 = SublyConfig::ENCRYPTED_STATE_OFFSET as u32;
-const CONFIG_CIPHERTEXT_LEN: u32 = SublyConfig::ENCRYPTED_STATE_LEN as u32;
-const USER_STAKE_CIPHERTEXT_OFFSET: u32 = UserStakeAccount::ENCRYPTED_STATE_OFFSET as u32;
-const USER_STAKE_CIPHERTEXT_LEN: u32 = UserStakeAccount::ENCRYPTED_STATE_LEN as u32;
+const CONFIG_CIPHERTEXT_OFFSET: u32 =
+    (SublyConfig::ENCRYPTED_STATE_OFFSET + crate::subly::state::MXE_NONCE_LEN) as u32;
+const CONFIG_CIPHERTEXT_LEN: u32 =
+    (SublyConfig::ENCRYPTED_STATE_LEN - crate::subly::state::MXE_NONCE_LEN) as u32;
+const USER_STAKE_CIPHERTEXT_OFFSET: u32 =
+    (UserStakeAccount::ENCRYPTED_STATE_OFFSET + crate::subly::state::MXE_NONCE_LEN) as u32;
+const USER_STAKE_CIPHERTEXT_LEN: u32 =
+    (UserStakeAccount::ENCRYPTED_STATE_LEN - crate::subly::state::MXE_NONCE_LEN) as u32;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct StakeArgs {
@@ -21,6 +25,9 @@ pub struct StakeArgs {
 
 pub fn handler(ctx: Context<Stake>, computation_offset: u64, args: StakeArgs) -> Result<()> {
     require!(args.amount > 0, ErrorCode::AmountTooSmall);
+
+    let lock_duration =
+        lock_duration_for_index(args.lock_option).ok_or(ErrorCode::InvalidLockOption)?;
 
     let now = Clock::get()?.unix_timestamp;
     require!(now >= 0, ErrorCode::ComputationValidationFailed);
@@ -36,54 +43,42 @@ pub fn handler(ctx: Context<Stake>, computation_offset: u64, args: StakeArgs) ->
         ErrorCode::PendingComputationInProgress
     );
 
-    let user = &ctx.accounts.user;
-    let user_key = user.key();
-    let user_stake_nonce;
     {
         let user_stake = &mut ctx.accounts.user_stake;
-        user_stake.ensure_owner(user_key, ctx.bumps.user_stake);
-        require_keys_eq!(user_stake.owner, user_key, ErrorCode::InvalidPositionOwner);
+        user_stake.ensure_owner(ctx.accounts.user.key(), ctx.bumps.user_stake);
         require!(
             user_stake.pending_computation_offset.is_none(),
             ErrorCode::PendingComputationInProgress
         );
-        require!(
-            (user_stake.entry_count as usize) < MAX_STAKE_ENTRIES,
-            ErrorCode::ComputationValidationFailed
-        );
-        user_stake_nonce = user_stake.encrypted_state.nonce;
     }
 
-    let config_nonce = ctx.accounts.config.encrypted_state.nonce;
-    let config_key = ctx.accounts.config.key();
-    let user_stake_key = ctx.accounts.user_stake.key();
-
-    // Optimistic capacity check to fail early before CPI
-    // Transfer funds into the vault prior to queuing the computation.
-    let transfer_accounts = Transfer {
-        from: ctx.accounts.user_token_account.to_account_info(),
-        to: ctx.accounts.vault.to_account_info(),
-        authority: user.to_account_info(),
-    };
+    // Move funds into the vault prior to queuing computation.
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
-            transfer_accounts,
+            Transfer {
+                from: ctx.accounts.user_token_account.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
+            },
         ),
         args.amount,
     )?;
 
+    let config_key = ctx.accounts.config.key();
+    let user_stake_key = ctx.accounts.user_stake.key();
+
     let arguments = vec![
-        Argument::PlaintextU128(config_nonce),
+        Argument::PlaintextU128(ctx.accounts.config.encrypted_state.nonce),
         Argument::Account(config_key, CONFIG_CIPHERTEXT_OFFSET, CONFIG_CIPHERTEXT_LEN),
-        Argument::PlaintextU128(user_stake_nonce),
+        Argument::PlaintextU128(ctx.accounts.user_stake.encrypted_state.nonce),
         Argument::Account(
             user_stake_key,
             USER_STAKE_CIPHERTEXT_OFFSET,
             USER_STAKE_CIPHERTEXT_LEN,
         ),
         Argument::PlaintextU64(args.amount),
-        Argument::PlaintextU8(args.lock_option),
+        Argument::PlaintextU64(lock_duration as u64),
         Argument::PlaintextU64(now_u64),
     ];
 
@@ -127,15 +122,11 @@ pub fn callback(
         return Err(ErrorCode::PendingComputationMismatch.into());
     }
 
-    let previous_user_cipher = user_stake.encrypted_state.clone();
-
     let StakeSublyOutput {
         field_0:
             StakeSublyOutputStruct0 {
                 field_0: config_cipher,
                 field_1: stake_cipher,
-                field_2: entry_count,
-                field_3: _next_tranche_id,
             },
     } = match output {
         ComputationOutputs::Success(payload) => payload,
@@ -157,17 +148,10 @@ pub fn callback(
         ErrorCode::InvalidPositionOwner
     );
 
-    if previous_user_cipher.nonce == stake_cipher.nonce
-        && previous_user_cipher.ciphertexts == stake_cipher.ciphertexts
-    {
-        return Err(ErrorCode::ComputationValidationFailed.into());
-    }
-
     config.encrypted_state = EncryptedState::from(config_cipher);
     config.paused = false;
 
     user_stake.encrypted_state = EncryptedState::from(stake_cipher);
-    user_stake.entry_count = entry_count;
 
     Ok(())
 }
