@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::subly::constants::{BILLING_PERIOD_SECONDS, CONFIG_SEED, USER_SUBSCRIPTIONS_SEED};
 use crate::subly::error::ErrorCode;
-use crate::subly::state::{SublyConfig, SubscriptionStatus, UserSubscriptions};
+use crate::subly::state::{SublyConfig, UserSubscriptions};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct RecordSubscriptionPaymentArgs {
@@ -14,9 +14,8 @@ pub struct RecordSubscriptionPaymentArgs {
 pub struct SubscriptionPaymentRecorded {
     pub operator: Pubkey,
     pub user: Pubkey,
-    pub subscription_id: u64,
-    pub status: String,
     pub paid_ts: i64,
+    // subscription_id and status are not exposed for privacy
 }
 
 #[derive(Accounts)]
@@ -56,24 +55,15 @@ pub fn handler(
         .user_subscriptions
         .ensure_owner(user_key, user_bump);
 
-    let status = ctx.accounts.user_subscriptions.record_payment(
+    ctx.accounts.user_subscriptions.record_payment(
         args.subscription_id,
         paid_ts,
         BILLING_PERIOD_SECONDS,
     )?;
 
-    let status_str = match status {
-        SubscriptionStatus::Active => "ACTIVE",
-        SubscriptionStatus::PendingCancellation => "PENDING_CANCELLATION",
-        SubscriptionStatus::Cancelled => "CANCELLED",
-    }
-    .to_string();
-
     emit!(SubscriptionPaymentRecorded {
         operator: ctx.accounts.operator.key(),
         user: ctx.accounts.user.key(),
-        subscription_id: args.subscription_id,
-        status: status_str,
         paid_ts,
     });
 

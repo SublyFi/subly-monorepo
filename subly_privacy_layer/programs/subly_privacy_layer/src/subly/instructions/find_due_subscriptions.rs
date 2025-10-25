@@ -13,12 +13,9 @@ pub struct FindDueSubscriptionsArgs {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct DueSubscriptionInfo {
     pub user: Pubkey,
-    pub subscription_id: u64,
     pub encrypted_subscription: EncryptedPayloadEvent,
-    pub recipient_type: String,
-    pub receiver: String,
-    pub due_ts: i64,
-    pub initial_payment_recorded: bool,
+    // subscription_id, recipient_type, receiver, due_ts, and initial_payment_recorded
+    // are not exposed for privacy. Backend processes encrypted_subscription to extract needed info.
 }
 
 #[event]
@@ -68,12 +65,6 @@ pub fn handler(ctx: Context<FindDueSubscriptions>, args: FindDueSubscriptionsArg
             continue;
         }
 
-        let recipient_type = user_subscriptions_account
-            .paypal_recipient_type
-            .as_str()
-            .to_string();
-        let receiver = user_subscriptions_account.paypal_receiver.clone();
-
         for subscription in user_subscriptions_account.subscriptions.iter() {
             if subscription.status != SubscriptionStatus::Active {
                 continue;
@@ -85,16 +76,11 @@ pub fn handler(ctx: Context<FindDueSubscriptions>, args: FindDueSubscriptionsArg
 
             due_entries.push(DueSubscriptionInfo {
                 user: user_key,
-                subscription_id: subscription.id,
                 encrypted_subscription: EncryptedPayloadEvent {
                     ciphertexts: subscription.encrypted_data.as_vec(),
                     nonce: subscription.encrypted_data.nonce,
                     encryption_key: subscription.encrypted_data.encryption_key,
                 },
-                recipient_type: recipient_type.clone(),
-                receiver: receiver.clone(),
-                due_ts: subscription.next_billing_ts,
-                initial_payment_recorded: subscription.initial_payment_recorded,
             });
         }
     }

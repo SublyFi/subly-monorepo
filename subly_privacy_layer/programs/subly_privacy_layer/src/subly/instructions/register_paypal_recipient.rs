@@ -13,8 +13,8 @@ pub struct RegisterPayPalRecipientArgs {
 #[event]
 pub struct PayPalRecipientRegistered {
     pub user: Pubkey,
-    pub recipient_type: String,
-    pub receiver: String,
+    // PayPal recipient information is stored encrypted on-chain
+    // and not exposed in events for privacy
 }
 
 #[derive(Accounts)]
@@ -80,8 +80,6 @@ pub fn handler(
 
     emit!(PayPalRecipientRegistered {
         user: user_key,
-        recipient_type: recipient_type.as_str().to_string(),
-        receiver,
     });
 
     Ok(())

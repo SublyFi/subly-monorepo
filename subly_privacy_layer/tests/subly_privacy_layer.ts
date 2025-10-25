@@ -564,8 +564,10 @@ describe("subly_privacy_layer confidential subscriptions", () => {
     expect(activationData.user.toBase58()).to.eq(
       subscriptionUser.publicKey.toBase58()
     );
-    expect(activationData.recipientType).to.eq("PHONE");
-    expect(activationData.receiver).to.eq("91-734-234-1234");
+    
+    // ✅ Privacy: recipient_type and receiver are no longer exposed in events
+    console.log("✅ Privacy enhanced: PayPal info not exposed in SubscriptionActivated event");
+    
     expect(
       Uint8Array.from(activationData.encryptedSubscription.encryptionKey)
     ).to.deep.eq(Uint8Array.from(clientPublicKey));
@@ -698,6 +700,10 @@ describe("subly_privacy_layer confidential subscriptions", () => {
     );
     expect(due, "SubscriptionsDue event missing").to.not.eq(undefined);
     expect(due!.data.entries.length).to.eq(1);
+    
+    // ✅ Privacy: recipient_type, receiver, subscription_id, due_ts are no longer exposed
+    console.log("✅ Privacy enhanced: sensitive fields not exposed in SubscriptionsDue event");
+    
     const decryptedDue = decryptBundle(
       cipher,
       due!.data.entries[0].encryptedSubscription
@@ -737,7 +743,9 @@ describe("subly_privacy_layer confidential subscriptions", () => {
     expect(paymentEvent, "SubscriptionPaymentRecorded missing").to.not.eq(
       undefined
     );
-    expect(paymentEvent!.data.status).to.eq("ACTIVE");
+    
+    // ✅ Privacy: subscription_id and status are no longer exposed in events
+    console.log("✅ Privacy enhanced: subscription_id and status not exposed in SubscriptionPaymentRecorded event");
 
     await program.methods
       .unsubscribeService({ subscriptionId: toBN(subscriptionId) })

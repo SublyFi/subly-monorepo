@@ -35,11 +35,8 @@ pub struct EncryptedPayloadEvent {
 #[event]
 pub struct SubscriptionActivated {
     pub user: Pubkey,
-    pub subscription_id: u64,
     pub encrypted_subscription: EncryptedPayloadEvent,
     pub encrypted_total_commitment: EncryptedPayloadEvent,
-    pub recipient_type: String,
-    pub receiver: String,
 }
 
 #[queue_computation_accounts("subscribe_service", user)]
@@ -440,13 +437,6 @@ pub fn handle_callback(
 
     ctx.accounts.user_subscriptions.encrypted_active_commitment = total_bundle.clone();
 
-    let recipient_type = ctx
-        .accounts
-        .user_subscriptions
-        .paypal_recipient_type
-        .as_str()
-        .to_string();
-    let receiver = ctx.accounts.user_subscriptions.paypal_receiver.clone();
     let user_key = ctx.accounts.user_subscriptions.owner;
 
     let encrypted_subscription_event = EncryptedPayloadEvent {
@@ -463,11 +453,8 @@ pub fn handle_callback(
 
     emit!(SubscriptionActivated {
         user: user_key,
-        subscription_id,
         encrypted_subscription: encrypted_subscription_event,
         encrypted_total_commitment: encrypted_total_event,
-        recipient_type,
-        receiver,
     });
 
     msg!(
