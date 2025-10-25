@@ -1,3 +1,4 @@
+pub mod create_subscription_metadata;
 pub mod find_due_subscriptions;
 pub mod initialize;
 pub mod record_subscription_payment;

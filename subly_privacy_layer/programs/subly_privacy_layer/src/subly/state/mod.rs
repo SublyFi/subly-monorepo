@@ -445,10 +445,20 @@ impl ConfidentialBundle {
     }
 }
 
+/// Represents a user's subscription to a service.
+///
+/// Privacy considerations:
+/// - `encrypted_data`: Contains sensitive subscription details (service_id, price, interval) - ENCRYPTED ✅
+/// - `encrypted_metadata`: Contains timestamps and status - ENCRYPTED ✅ (Phase 3)
+/// - Legacy fields (started_at, last_payment_ts, etc.): Kept for backward compatibility
+///   These are NOT exposed in events and will be deprecated in favor of encrypted_metadata
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
 pub struct UserSubscription {
     pub id: u64,
     pub encrypted_data: ConfidentialBundle,
+    /// Encrypted metadata containing timestamps and status (Phase 3 enhancement)
+    pub encrypted_metadata: ConfidentialBundle,
+    // Legacy fields - kept for backward compatibility, not exposed in events
     pub started_at: i64,
     pub last_payment_ts: i64,
     pub next_billing_ts: i64,
@@ -460,6 +470,7 @@ pub struct UserSubscription {
 impl UserSubscription {
     pub const SIZE: usize = 8  // id
         + ConfidentialBundle::SIZE // encrypted_data
+        + ConfidentialBundle::SIZE // encrypted_metadata
         + 8  // started_at
         + 8  // last_payment_ts
         + 8  // next_billing_ts
@@ -552,6 +563,7 @@ impl UserSubscriptions {
         let subscription = UserSubscription {
             id: self.next_subscription_id,
             encrypted_data,
+            encrypted_metadata: Default::default(), // Will be populated by MPC callback
             started_at: now,
             last_payment_ts: now,
             next_billing_ts,

@@ -78,9 +78,7 @@ pub fn handler(
 
     msg!("RegisterPayPalRecipient: PayPal info configured");
 
-    emit!(PayPalRecipientRegistered {
-        user: user_key,
-    });
+    emit!(PayPalRecipientRegistered { user: user_key });
 
     Ok(())
 }

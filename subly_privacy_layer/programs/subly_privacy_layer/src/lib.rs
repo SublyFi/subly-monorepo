@@ -2,9 +2,14 @@ pub mod subly;
 
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
+use subly::instructions::create_subscription_metadata::CreateSubscriptionMetadataOutput;
 use subly::instructions::subscribe_service::SubscribeServiceOutput;
 
 pub use subly::constants as subly_constants;
+pub use subly::instructions::create_subscription_metadata::{
+    CreateSubscriptionMetadata, CreateSubscriptionMetadataCallback,
+    InitCreateSubscriptionMetadataCompDef,
+};
 pub use subly::instructions::find_due_subscriptions::{
     DueSubscriptionInfo, FindDueSubscriptions, FindDueSubscriptionsArgs, SubscriptionsDue,
 };
@@ -65,6 +70,18 @@ pub mod __client_accounts_subscribe_service_callback {
     pub use crate::subly::instructions::subscribe_service::__client_accounts_subscribe_service_callback::*;
 }
 
+pub mod __client_accounts_init_create_subscription_metadata_comp_def {
+    pub use crate::subly::instructions::create_subscription_metadata::__client_accounts_init_create_subscription_metadata_comp_def::*;
+}
+
+pub mod __client_accounts_create_subscription_metadata {
+    pub use crate::subly::instructions::create_subscription_metadata::__client_accounts_create_subscription_metadata::*;
+}
+
+pub mod __client_accounts_create_subscription_metadata_callback {
+    pub use crate::subly::instructions::create_subscription_metadata::__client_accounts_create_subscription_metadata_callback::*;
+}
+
 pub mod __client_accounts_register_pay_pal_recipient {
     pub use crate::subly::instructions::register_paypal_recipient::__client_accounts_register_pay_pal_recipient::*;
 }
@@ -80,7 +97,12 @@ pub mod __client_accounts_record_subscription_payment {
 pub mod __client_accounts_unsubscribe_service {
     pub use crate::subly::instructions::unsubscribe_service::__client_accounts_unsubscribe_service::*;
 }
+
 const COMP_DEF_OFFSET_SUBSCRIBE_SERVICE: u32 = comp_def_offset("subscribe_service");
+const COMP_DEF_OFFSET_CREATE_SUBSCRIPTION_METADATA: u32 =
+    comp_def_offset("create_subscription_metadata");
+const COMP_DEF_OFFSET_UPDATE_SUBSCRIPTION_METADATA: u32 =
+    comp_def_offset("update_subscription_metadata");
 
 declare_id!("HLSVfoqwhdrEpLn2XnvaywFWPM8Mi2rXvEu9vdZZNhyw");
 
@@ -132,6 +154,29 @@ pub mod subly_privacy_layer {
         output: ComputationOutputs<SubscribeServiceOutput>,
     ) -> Result<()> {
         subly::instructions::subscribe_service::handle_callback(ctx, output)
+    }
+
+    pub fn init_create_subscription_metadata_comp_def(
+        ctx: Context<InitCreateSubscriptionMetadataCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
+
+    pub fn create_subscription_metadata(
+        ctx: Context<CreateSubscriptionMetadata>,
+        computation_offset: u64,
+        nonce: u128,
+    ) -> Result<()> {
+        subly::instructions::create_subscription_metadata::handler(ctx, computation_offset, nonce)
+    }
+
+    #[arcium_callback(encrypted_ix = "create_subscription_metadata")]
+    pub fn create_subscription_metadata_callback(
+        ctx: Context<CreateSubscriptionMetadataCallback>,
+        output: ComputationOutputs<CreateSubscriptionMetadataOutput>,
+    ) -> Result<()> {
+        subly::instructions::create_subscription_metadata::handle_callback(ctx, output)
     }
 
     pub fn register_paypal_recipient(
