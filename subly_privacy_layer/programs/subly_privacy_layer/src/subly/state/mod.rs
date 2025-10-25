@@ -397,11 +397,58 @@ impl PayPalRecipientType {
     }
 }
 
+pub const MAX_CONFIDENTIAL_CIPHERTEXTS: usize = 4;
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
+pub struct ConfidentialBundle {
+    pub ciphertexts: [[u8; 32]; MAX_CONFIDENTIAL_CIPHERTEXTS],
+    pub ciphertext_count: u8,
+    pub nonce: [u8; 16],
+    pub encryption_key: [u8; 32],
+}
+
+impl ConfidentialBundle {
+    pub const SIZE: usize = 32 * MAX_CONFIDENTIAL_CIPHERTEXTS
+        + 1  // ciphertext_count
+        + 16 // nonce
+        + 32; // encryption_key
+
+    pub fn from_slice(
+        ciphertexts: &[[u8; 32]],
+        nonce: [u8; 16],
+        encryption_key: [u8; 32],
+    ) -> Result<Self> {
+        require!(
+            ciphertexts.len() <= MAX_CONFIDENTIAL_CIPHERTEXTS,
+            ErrorCode::TooManyCiphertexts
+        );
+
+        let mut payload = [[0u8; 32]; MAX_CONFIDENTIAL_CIPHERTEXTS];
+        for (idx, value) in ciphertexts.iter().enumerate() {
+            payload[idx] = *value;
+        }
+
+        Ok(Self {
+            ciphertexts: payload,
+            ciphertext_count: ciphertexts.len() as u8,
+            nonce,
+            encryption_key,
+        })
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &[u8; 32]> {
+        self.ciphertexts.iter().take(self.ciphertext_count as usize)
+    }
+
+    pub fn as_vec(&self) -> Vec<[u8; 32]> {
+        self.iter().copied().collect()
+    }
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
 pub struct UserSubscription {
     pub id: u64,
-    pub service_id: u64,
-    pub monthly_price_usdc: u64,
+    pub encrypted_data: ConfidentialBundle,
     pub started_at: i64,
     pub last_payment_ts: i64,
     pub next_billing_ts: i64,
@@ -412,8 +459,7 @@ pub struct UserSubscription {
 
 impl UserSubscription {
     pub const SIZE: usize = 8  // id
-        + 8  // service_id
-        + 8  // monthly_price_usdc
+        + ConfidentialBundle::SIZE // encrypted_data
         + 8  // started_at
         + 8  // last_payment_ts
         + 8  // next_billing_ts
@@ -426,9 +472,9 @@ impl UserSubscription {
 pub struct UserSubscriptions {
     pub owner: Pubkey,
     pub next_subscription_id: u64,
-    pub total_active_commitment: u64,
-    pub total_pending_commitment: u64,
     pub bump: u8,
+    pub encrypted_active_commitment: ConfidentialBundle,
+    pub encrypted_pending_commitment: ConfidentialBundle,
     pub subscriptions: Vec<UserSubscription>,
     pub paypal_configured: bool,
     pub paypal_recipient_type: PayPalRecipientType,
@@ -440,9 +486,9 @@ impl UserSubscriptions {
     pub const BASE_SIZE: usize = 8  // discriminator
         + 32 // owner
         + 8  // next_subscription_id
-        + 8  // total_active_commitment
-        + 8  // total_pending_commitment
         + 1  // bump
+        + ConfidentialBundle::SIZE // encrypted_active_commitment
+        + ConfidentialBundle::SIZE // encrypted_pending_commitment
         + 4  // subscriptions length prefix
         + 1  // paypal_configured
         + 1  // paypal_recipient_type enum tag
@@ -455,13 +501,19 @@ impl UserSubscriptions {
         if self.owner == Pubkey::default() {
             self.owner = owner;
             self.bump = bump;
-            self.next_subscription_id = 0;
-            self.total_active_commitment = 0;
-            self.total_pending_commitment = 0;
-            self.subscriptions = Vec::with_capacity(Self::INITIAL_SUBSCRIPTION_CAPACITY);
+            self.next_subscription_id = 1; // Start from 1, not 0
+            self.encrypted_active_commitment = ConfidentialBundle::default();
+            self.encrypted_pending_commitment = ConfidentialBundle::default();
+            // Don't use Vec::with_capacity or String::new() with init_if_needed
+            // Anchor's init_if_needed already zero-initializes the account
+            // Just ensure the Vec and String are in a valid state
+            if self.subscriptions.capacity() == 0 {
+                // Only initialize if not already initialized
+                self.subscriptions = Vec::new();
+            }
             self.paypal_configured = false;
             self.paypal_recipient_type = PayPalRecipientType::Email;
-            self.paypal_receiver = String::new();
+            // paypal_receiver is already initialized by Anchor as empty String
         }
     }
 
@@ -474,7 +526,6 @@ impl UserSubscriptions {
     }
 
     pub fn refresh(&mut self, now: i64) -> Result<()> {
-        let mut released: u64 = 0;
         for subscription in self.subscriptions.iter_mut() {
             if subscription.status == SubscriptionStatus::PendingCancellation
                 && subscription.pending_until_ts > 0
@@ -482,40 +533,15 @@ impl UserSubscriptions {
             {
                 subscription.status = SubscriptionStatus::Cancelled;
                 subscription.pending_until_ts = 0;
-                released = released
-                    .checked_add(subscription.monthly_price_usdc)
-                    .ok_or(ErrorCode::MathOverflow)?;
             }
-        }
-
-        if released > 0 {
-            self.total_pending_commitment = self
-                .total_pending_commitment
-                .checked_sub(released)
-                .ok_or(ErrorCode::MathOverflow)?;
         }
 
         Ok(())
     }
 
-    pub fn total_committed(&self) -> Result<u64> {
-        self.total_active_commitment
-            .checked_add(self.total_pending_commitment)
-            .ok_or(ErrorCode::MathOverflow.into())
-    }
-
-    pub fn has_active_or_pending_for_service(&self, service_id: u64) -> bool {
-        self.subscriptions.iter().any(|subscription| {
-            subscription.service_id == service_id
-                && (subscription.status == SubscriptionStatus::Active
-                    || subscription.status == SubscriptionStatus::PendingCancellation)
-        })
-    }
-
     pub fn record_subscription(
         &mut self,
-        service_id: u64,
-        monthly_price: u64,
+        encrypted_data: ConfidentialBundle,
         now: i64,
         billing_period: i64,
     ) -> Result<u64> {
@@ -525,8 +551,7 @@ impl UserSubscriptions {
 
         let subscription = UserSubscription {
             id: self.next_subscription_id,
-            service_id,
-            monthly_price_usdc: monthly_price,
+            encrypted_data,
             started_at: now,
             last_payment_ts: now,
             next_billing_ts,
@@ -536,11 +561,6 @@ impl UserSubscriptions {
         };
 
         self.subscriptions.push(subscription);
-
-        self.total_active_commitment = self
-            .total_active_commitment
-            .checked_add(monthly_price)
-            .ok_or(ErrorCode::MathOverflow)?;
 
         let new_id = self.next_subscription_id;
         self.next_subscription_id = self
@@ -556,7 +576,7 @@ impl UserSubscriptions {
         subscription_id: u64,
         now: i64,
         billing_period: i64,
-    ) -> Result<(u64, u64, i64)> {
+    ) -> Result<i64> {
         let subscription = self
             .subscriptions
             .iter_mut()
@@ -568,11 +588,6 @@ impl UserSubscriptions {
             ErrorCode::SubscriptionNotActive
         );
 
-        self.total_active_commitment = self
-            .total_active_commitment
-            .checked_sub(subscription.monthly_price_usdc)
-            .ok_or(ErrorCode::MathOverflow)?;
-
         let pending_until = if subscription.next_billing_ts > now {
             subscription.next_billing_ts
         } else {
@@ -583,16 +598,7 @@ impl UserSubscriptions {
         subscription.status = SubscriptionStatus::PendingCancellation;
         subscription.pending_until_ts = pending_until;
 
-        self.total_pending_commitment = self
-            .total_pending_commitment
-            .checked_add(subscription.monthly_price_usdc)
-            .ok_or(ErrorCode::MathOverflow)?;
-
-        Ok((
-            subscription.service_id,
-            subscription.monthly_price_usdc,
-            pending_until,
-        ))
+        Ok(pending_until)
     }
 
     pub fn set_paypal_recipient(&mut self, recipient_type: PayPalRecipientType, receiver: String) {
@@ -645,10 +651,6 @@ impl UserSubscriptions {
             subscription.status = SubscriptionStatus::Cancelled;
             subscription.pending_until_ts = 0;
             subscription.next_billing_ts = 0;
-            self.total_pending_commitment = self
-                .total_pending_commitment
-                .checked_sub(subscription.monthly_price_usdc)
-                .ok_or(ErrorCode::MathOverflow)?;
             Ok(SubscriptionStatus::Cancelled)
         }
     }

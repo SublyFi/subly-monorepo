@@ -1,10 +1,9 @@
 use anchor_lang::{prelude::*, AccountDeserialize};
 
-use crate::subly::constants::{CONFIG_SEED, SUBSCRIPTION_REGISTRY_SEED, USER_SUBSCRIPTIONS_SEED};
+use crate::subly::constants::{CONFIG_SEED, USER_SUBSCRIPTIONS_SEED};
 use crate::subly::error::ErrorCode;
-use crate::subly::state::{
-    SublyConfig, SubscriptionRegistry, SubscriptionStatus, UserSubscriptions,
-};
+use crate::subly::instructions::subscribe_service::EncryptedPayloadEvent;
+use crate::subly::state::{SublyConfig, SubscriptionStatus, UserSubscriptions};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct FindDueSubscriptionsArgs {
@@ -15,9 +14,7 @@ pub struct FindDueSubscriptionsArgs {
 pub struct DueSubscriptionInfo {
     pub user: Pubkey,
     pub subscription_id: u64,
-    pub service_id: u64,
-    pub service_name: String,
-    pub monthly_price_usdc: u64,
+    pub encrypted_subscription: EncryptedPayloadEvent,
     pub recipient_type: String,
     pub receiver: String,
     pub due_ts: i64,
@@ -36,11 +33,6 @@ pub struct FindDueSubscriptions<'info> {
         bump = config.bump,
     )]
     pub config: Account<'info, SublyConfig>,
-    #[account(
-        seeds = [SUBSCRIPTION_REGISTRY_SEED.as_bytes()],
-        bump = subscription_registry.bump,
-    )]
-    pub subscription_registry: Account<'info, SubscriptionRegistry>,
 }
 
 pub fn handler(ctx: Context<FindDueSubscriptions>, args: FindDueSubscriptionsArgs) -> Result<()> {
@@ -91,20 +83,14 @@ pub fn handler(ctx: Context<FindDueSubscriptions>, args: FindDueSubscriptionsArg
                 continue;
             }
 
-            let service = ctx
-                .accounts
-                .subscription_registry
-                .services
-                .iter()
-                .find(|service| service.id == subscription.service_id)
-                .ok_or(ErrorCode::SubscriptionServiceNotFound)?;
-
             due_entries.push(DueSubscriptionInfo {
                 user: user_key,
                 subscription_id: subscription.id,
-                service_id: subscription.service_id,
-                service_name: service.name.clone(),
-                monthly_price_usdc: subscription.monthly_price_usdc,
+                encrypted_subscription: EncryptedPayloadEvent {
+                    ciphertexts: subscription.encrypted_data.as_vec(),
+                    nonce: subscription.encrypted_data.nonce,
+                    encryption_key: subscription.encrypted_data.encryption_key,
+                },
                 recipient_type: recipient_type.clone(),
                 receiver: receiver.clone(),
                 due_ts: subscription.next_billing_ts,

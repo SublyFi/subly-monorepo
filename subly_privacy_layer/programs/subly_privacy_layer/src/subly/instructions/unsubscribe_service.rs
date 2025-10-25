@@ -1,6 +1,8 @@
 use anchor_lang::prelude::*;
 
 use crate::subly::constants::{BILLING_PERIOD_SECONDS, USER_SUBSCRIPTIONS_SEED};
+use crate::subly::error::ErrorCode;
+use crate::subly::instructions::subscribe_service::EncryptedPayloadEvent;
 use crate::subly::state::UserSubscriptions;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
@@ -12,8 +14,7 @@ pub struct UnsubscribeServiceArgs {
 pub struct SubscriptionCancellationRequested {
     pub user: Pubkey,
     pub subscription_id: u64,
-    pub service_id: u64,
-    pub monthly_price_usdc: u64,
+    pub encrypted_subscription: EncryptedPayloadEvent,
     pub pending_until_ts: i64,
 }
 
@@ -40,16 +41,29 @@ pub fn handler(ctx: Context<UnsubscribeService>, args: UnsubscribeServiceArgs) -
 
     ctx.accounts.user_subscriptions.refresh(now)?;
 
-    let (service_id, monthly_price_usdc, pending_until_ts) = ctx
+    let subscription = ctx
         .accounts
         .user_subscriptions
-        .begin_cancellation(args.subscription_id, now, BILLING_PERIOD_SECONDS)?;
+        .subscriptions
+        .iter()
+        .find(|subscription| subscription.id == args.subscription_id)
+        .cloned()
+        .ok_or(ErrorCode::SubscriptionNotFound)?;
+
+    let pending_until_ts = ctx.accounts.user_subscriptions.begin_cancellation(
+        args.subscription_id,
+        now,
+        BILLING_PERIOD_SECONDS,
+    )?;
 
     emit!(SubscriptionCancellationRequested {
         user: user_key,
         subscription_id: args.subscription_id,
-        service_id,
-        monthly_price_usdc,
+        encrypted_subscription: EncryptedPayloadEvent {
+            ciphertexts: subscription.encrypted_data.as_vec(),
+            nonce: subscription.encrypted_data.nonce,
+            encryption_key: subscription.encrypted_data.encryption_key,
+        },
         pending_until_ts,
     });
 

@@ -50,4 +50,16 @@ pub enum ErrorCode {
     PayPalInfoMissing,
     #[msg("Subscription is not payable in its current state")]
     SubscriptionNotPayable,
+    #[msg("Provided ciphertext payload exceeds the allowed capacity")]
+    TooManyCiphertexts,
+    #[msg("Computation aborted by the Arcium network")]
+    AbortedComputation,
+    #[msg("Encrypted payload layout is invalid")]
+    InvalidEncryptedPayload,
+    #[msg("Active commitment ciphertext does not match stored value")]
+    CommitmentCiphertextMismatch,
+    #[msg("Encrypted commitment state is malformed")]
+    InvalidCommitmentState,
+    #[msg("Cluster not set")]
+    ClusterNotSet,
 }
