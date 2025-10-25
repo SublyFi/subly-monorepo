@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::subly::constants::{BILLING_PERIOD_SECONDS, USER_SUBSCRIPTIONS_SEED};
+use crate::subly::constants::USER_SUBSCRIPTIONS_SEED;
 use crate::subly::error::ErrorCode;
 use crate::subly::instructions::subscribe_service::EncryptedPayloadEvent;
 use crate::subly::state::UserSubscriptions;
@@ -15,7 +15,7 @@ pub struct SubscriptionCancellationRequested {
     pub user: Pubkey,
     pub subscription_id: u64,
     pub encrypted_subscription: EncryptedPayloadEvent,
-    pub pending_until_ts: i64,
+    // pending_until_ts removed - now encrypted in metadata
 }
 
 #[derive(Accounts)]
@@ -31,15 +31,12 @@ pub struct UnsubscribeService<'info> {
 }
 
 pub fn handler(ctx: Context<UnsubscribeService>, args: UnsubscribeServiceArgs) -> Result<()> {
-    let now = Clock::get()?.unix_timestamp;
     let user_key = ctx.accounts.user.key();
 
     let stored_bump = ctx.accounts.user_subscriptions.bump;
     ctx.accounts
         .user_subscriptions
         .ensure_owner(user_key, stored_bump);
-
-    ctx.accounts.user_subscriptions.refresh(now)?;
 
     let subscription = ctx
         .accounts
@@ -50,11 +47,10 @@ pub fn handler(ctx: Context<UnsubscribeService>, args: UnsubscribeServiceArgs) -
         .cloned()
         .ok_or(ErrorCode::SubscriptionNotFound)?;
 
-    let pending_until_ts = ctx.accounts.user_subscriptions.begin_cancellation(
-        args.subscription_id,
-        now,
-        BILLING_PERIOD_SECONDS,
-    )?;
+    // TODO: Queue cancel_subscription_metadata MPC instruction to update status
+    // For now, just emit event with encrypted subscription data
+    msg!("NOTICE: Subscription cancellation now requires MPC call to cancel_subscription_metadata");
+    msg!("This will update the encrypted status to PendingCancellation");
 
     emit!(SubscriptionCancellationRequested {
         user: user_key,
@@ -64,7 +60,6 @@ pub fn handler(ctx: Context<UnsubscribeService>, args: UnsubscribeServiceArgs) -
             nonce: subscription.encrypted_data.nonce,
             encryption_key: subscription.encrypted_data.encryption_key,
         },
-        pending_until_ts,
     });
 
     Ok(())

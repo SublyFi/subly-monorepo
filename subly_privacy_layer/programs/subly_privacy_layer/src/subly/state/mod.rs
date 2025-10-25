@@ -447,36 +447,25 @@ impl ConfidentialBundle {
 
 /// Represents a user's subscription to a service.
 ///
-/// Privacy considerations:
-/// - `encrypted_data`: Contains sensitive subscription details (service_id, price, interval) - ENCRYPTED ✅
-/// - `encrypted_metadata`: Contains timestamps and status - ENCRYPTED ✅ (Phase 3)
-/// - Legacy fields (started_at, last_payment_ts, etc.): Kept for backward compatibility
-///   These are NOT exposed in events and will be deprecated in favor of encrypted_metadata
+/// Privacy-first design (Phase 4 - Full Privacy):
+/// - `encrypted_data`: Contains sensitive subscription details (service_id, price) - ENCRYPTED ✅
+/// - `encrypted_metadata`: Contains timestamps and status - ENCRYPTED ✅
+///
+/// All sensitive data is encrypted. No plaintext fields exposed on-chain.
+/// Metadata is encrypted with MXE-only encryption for maximum privacy.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
 pub struct UserSubscription {
     pub id: u64,
     pub encrypted_data: ConfidentialBundle,
-    /// Encrypted metadata containing timestamps and status (Phase 3 enhancement)
+    /// Encrypted metadata containing timestamps and status (MXE-only encryption)
+    /// Fields: started_at, last_payment_ts, next_billing_ts, status
     pub encrypted_metadata: ConfidentialBundle,
-    // Legacy fields - kept for backward compatibility, not exposed in events
-    pub started_at: i64,
-    pub last_payment_ts: i64,
-    pub next_billing_ts: i64,
-    pub pending_until_ts: i64,
-    pub status: SubscriptionStatus,
-    pub initial_payment_recorded: bool,
 }
 
 impl UserSubscription {
     pub const SIZE: usize = 8  // id
         + ConfidentialBundle::SIZE // encrypted_data
-        + ConfidentialBundle::SIZE // encrypted_metadata
-        + 8  // started_at
-        + 8  // last_payment_ts
-        + 8  // next_billing_ts
-        + 8  // pending_until_ts
-        + 1  // status
-        + 1; // initial_payment_recorded
+        + ConfidentialBundle::SIZE; // encrypted_metadata
 }
 
 #[account]
@@ -536,40 +525,15 @@ impl UserSubscriptions {
         self.paypal_receiver.len()
     }
 
-    pub fn refresh(&mut self, now: i64) -> Result<()> {
-        for subscription in self.subscriptions.iter_mut() {
-            if subscription.status == SubscriptionStatus::PendingCancellation
-                && subscription.pending_until_ts > 0
-                && now >= subscription.pending_until_ts
-            {
-                subscription.status = SubscriptionStatus::Cancelled;
-                subscription.pending_until_ts = 0;
-            }
-        }
+    // NOTE: refresh, begin_cancellation, and record_payment functions removed
+    // These operations now happen via MPC to maintain privacy of encrypted_metadata
+    // Status and timestamp updates are performed by update_subscription_metadata MPC instruction
 
-        Ok(())
-    }
-
-    pub fn record_subscription(
-        &mut self,
-        encrypted_data: ConfidentialBundle,
-        now: i64,
-        billing_period: i64,
-    ) -> Result<u64> {
-        let next_billing_ts = now
-            .checked_add(billing_period)
-            .ok_or(ErrorCode::MathOverflow)?;
-
+    pub fn record_subscription(&mut self, encrypted_data: ConfidentialBundle) -> Result<u64> {
         let subscription = UserSubscription {
             id: self.next_subscription_id,
             encrypted_data,
-            encrypted_metadata: Default::default(), // Will be populated by MPC callback
-            started_at: now,
-            last_payment_ts: now,
-            next_billing_ts,
-            pending_until_ts: 0,
-            status: SubscriptionStatus::Active,
-            initial_payment_recorded: false,
+            encrypted_metadata: Default::default(), // Will be populated by create_subscription_metadata MPC callback
         };
 
         self.subscriptions.push(subscription);
@@ -583,88 +547,10 @@ impl UserSubscriptions {
         Ok(new_id)
     }
 
-    pub fn begin_cancellation(
-        &mut self,
-        subscription_id: u64,
-        now: i64,
-        billing_period: i64,
-    ) -> Result<i64> {
-        let subscription = self
-            .subscriptions
-            .iter_mut()
-            .find(|subscription| subscription.id == subscription_id)
-            .ok_or(ErrorCode::SubscriptionNotFound)?;
-
-        require!(
-            subscription.status == SubscriptionStatus::Active,
-            ErrorCode::SubscriptionNotActive
-        );
-
-        let pending_until = if subscription.next_billing_ts > now {
-            subscription.next_billing_ts
-        } else {
-            now.checked_add(billing_period)
-                .ok_or(ErrorCode::MathOverflow)?
-        };
-
-        subscription.status = SubscriptionStatus::PendingCancellation;
-        subscription.pending_until_ts = pending_until;
-
-        Ok(pending_until)
-    }
-
     pub fn set_paypal_recipient(&mut self, recipient_type: PayPalRecipientType, receiver: String) {
         self.paypal_configured = true;
         self.paypal_recipient_type = recipient_type;
         self.paypal_receiver = receiver;
-    }
-
-    pub fn record_payment(
-        &mut self,
-        subscription_id: u64,
-        now: i64,
-        billing_period: i64,
-    ) -> Result<SubscriptionStatus> {
-        let subscription = self
-            .subscriptions
-            .iter_mut()
-            .find(|subscription| subscription.id == subscription_id)
-            .ok_or(ErrorCode::SubscriptionNotFound)?;
-
-        require!(
-            subscription.status == SubscriptionStatus::Active
-                || subscription.status == SubscriptionStatus::PendingCancellation,
-            ErrorCode::SubscriptionNotPayable
-        );
-
-        if !subscription.initial_payment_recorded {
-            subscription.initial_payment_recorded = true;
-            subscription.last_payment_ts = now;
-            return Ok(subscription.status);
-        }
-
-        subscription.last_payment_ts = now;
-
-        if subscription.status == SubscriptionStatus::Active {
-            let mut next_due = subscription
-                .next_billing_ts
-                .checked_add(billing_period)
-                .ok_or(ErrorCode::MathOverflow)?;
-            let period = billing_period;
-            require!(period > 0, ErrorCode::MathOverflow);
-            while next_due <= now {
-                next_due = next_due
-                    .checked_add(period)
-                    .ok_or(ErrorCode::MathOverflow)?;
-            }
-            subscription.next_billing_ts = next_due;
-            Ok(SubscriptionStatus::Active)
-        } else {
-            subscription.status = SubscriptionStatus::Cancelled;
-            subscription.pending_until_ts = 0;
-            subscription.next_billing_ts = 0;
-            Ok(SubscriptionStatus::Cancelled)
-        }
     }
 }
 

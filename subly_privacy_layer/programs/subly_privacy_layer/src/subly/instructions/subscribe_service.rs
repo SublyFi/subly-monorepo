@@ -6,8 +6,7 @@ use arcium_client::idl::arcium::types::CallbackAccount;
 use crate::{SignerAccount, ID, ID_CONST};
 
 use crate::subly::constants::{
-    BASIS_POINTS_DIVISOR, BILLING_PERIOD_SECONDS, CONFIG_SEED, USER_POSITION_SEED,
-    USER_SUBSCRIPTIONS_SEED,
+    BASIS_POINTS_DIVISOR, CONFIG_SEED, USER_POSITION_SEED, USER_SUBSCRIPTIONS_SEED,
 };
 use crate::subly::error::ErrorCode;
 use crate::subly::state::{
@@ -146,7 +145,6 @@ pub fn handler(
     args: SubscribeServiceArgs,
 ) -> Result<()> {
     msg!("SubscribeService: begin");
-    let now = Clock::get()?.unix_timestamp;
     let config = &ctx.accounts.config;
     config.ensure_active()?;
     msg!("SubscribeService: config active");
@@ -233,9 +231,9 @@ pub fn handler(
             .encryption_key = [0u8; 32];
     }
 
-    ctx.accounts.user_subscriptions.refresh(now)?;
+    // NOTE: refresh() removed - status updates now happen via MPC
     msg!(
-        "SubscribeService: subscriptions refreshed active_count={} pending_count={} total_entries={}",
+        "SubscribeService: active_count={} pending_count={} total_entries={}",
         ctx.accounts
             .user_subscriptions
             .encrypted_active_commitment
@@ -421,14 +419,10 @@ pub fn handle_callback(
         subscription_bundle.nonce
     );
 
-    let now = Clock::get()?.unix_timestamp;
-    let billing_period = BILLING_PERIOD_SECONDS;
-
-    let subscription_id = ctx.accounts.user_subscriptions.record_subscription(
-        subscription_bundle.clone(),
-        now,
-        billing_period,
-    )?;
+    let subscription_id = ctx
+        .accounts
+        .user_subscriptions
+        .record_subscription(subscription_bundle.clone())?;
     msg!(
         "SubscribeService callback: recorded subscription id={} total_subscriptions={}",
         subscription_id,

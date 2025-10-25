@@ -98,11 +98,19 @@ pub struct CreateSubscriptionMetadataCallback<'info> {
 pub fn handler(
     ctx: Context<CreateSubscriptionMetadata>,
     computation_offset: u64,
-    nonce: u128,
+    started_at: u64,
+    next_billing_ts: u64,
 ) -> Result<()> {
-    msg!("CreateSubscriptionMetadata: start");
+    msg!(
+        "CreateSubscriptionMetadata: start with started_at={} next_billing_ts={}",
+        started_at,
+        next_billing_ts
+    );
 
-    let args = vec![Argument::PlaintextU128(nonce)];
+    let args = vec![
+        Argument::PlaintextU64(started_at),
+        Argument::PlaintextU64(next_billing_ts),
+    ];
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 

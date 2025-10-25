@@ -166,9 +166,15 @@ pub mod subly_privacy_layer {
     pub fn create_subscription_metadata(
         ctx: Context<CreateSubscriptionMetadata>,
         computation_offset: u64,
-        nonce: u128,
+        started_at: u64,
+        next_billing_ts: u64,
     ) -> Result<()> {
-        subly::instructions::create_subscription_metadata::handler(ctx, computation_offset, nonce)
+        subly::instructions::create_subscription_metadata::handler(
+            ctx,
+            computation_offset,
+            started_at,
+            next_billing_ts,
+        )
     }
 
     #[arcium_callback(encrypted_ix = "create_subscription_metadata")]

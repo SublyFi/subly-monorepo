@@ -1,9 +1,8 @@
-use anchor_lang::{prelude::*, AccountDeserialize};
+use anchor_lang::prelude::*;
 
-use crate::subly::constants::{CONFIG_SEED, USER_SUBSCRIPTIONS_SEED};
-use crate::subly::error::ErrorCode;
+use crate::subly::constants::CONFIG_SEED;
 use crate::subly::instructions::subscribe_service::EncryptedPayloadEvent;
-use crate::subly::state::{SublyConfig, SubscriptionStatus, UserSubscriptions};
+use crate::subly::state::SublyConfig;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct FindDueSubscriptionsArgs {
@@ -32,58 +31,23 @@ pub struct FindDueSubscriptions<'info> {
     pub config: Account<'info, SublyConfig>,
 }
 
-pub fn handler(ctx: Context<FindDueSubscriptions>, args: FindDueSubscriptionsArgs) -> Result<()> {
-    let now = Clock::get()?.unix_timestamp;
-    let upper_bound = now
-        .checked_add(args.look_ahead_seconds)
-        .ok_or(ErrorCode::MathOverflow)?;
-
+pub fn handler(ctx: Context<FindDueSubscriptions>, _args: FindDueSubscriptionsArgs) -> Result<()> {
     ctx.accounts.config.ensure_active()?;
 
-    let mut due_entries: Vec<DueSubscriptionInfo> = Vec::new();
+    // TODO: Implement MPC-based due subscription detection
+    // This will require a new MPC instruction that:
+    // 1. Takes encrypted_metadata from all subscriptions
+    // 2. Decrypts next_billing_ts and status in MPC
+    // 3. Compares with current time + lookahead
+    // 4. Returns list of due subscription indices (boolean array)
 
-    for account_info in ctx.remaining_accounts.iter() {
-        let account_info = account_info.clone();
-        let account_key = *account_info.key;
-        let data_ref = account_info.try_borrow_data()?;
-        let mut data_slice: &[u8] = &data_ref;
-        let user_subscriptions_account = UserSubscriptions::try_deserialize(&mut data_slice)?;
-        drop(data_ref);
-        let user_key = user_subscriptions_account.owner;
+    msg!("NOTICE: find_due_subscriptions now requires MPC implementation");
+    msg!("Due subscriptions cannot be determined without decrypting metadata");
+    msg!("A new MPC instruction 'find_due_subscriptions_mpc' is needed");
+    msg!("For now, this function returns empty list");
 
-        let (expected_pda, _) = Pubkey::find_program_address(
-            &[USER_SUBSCRIPTIONS_SEED.as_bytes(), user_key.as_ref()],
-            &crate::ID,
-        );
-        require_keys_eq!(
-            expected_pda,
-            account_key,
-            ErrorCode::InvalidSubscriptionAccount
-        );
-
-        if !user_subscriptions_account.paypal_configured {
-            continue;
-        }
-
-        for subscription in user_subscriptions_account.subscriptions.iter() {
-            if subscription.status != SubscriptionStatus::Active {
-                continue;
-            }
-            let initial_payment_pending = !subscription.initial_payment_recorded;
-            if !initial_payment_pending && subscription.next_billing_ts > upper_bound {
-                continue;
-            }
-
-            due_entries.push(DueSubscriptionInfo {
-                user: user_key,
-                encrypted_subscription: EncryptedPayloadEvent {
-                    ciphertexts: subscription.encrypted_data.as_vec(),
-                    nonce: subscription.encrypted_data.nonce,
-                    encryption_key: subscription.encrypted_data.encryption_key,
-                },
-            });
-        }
-    }
+    // Return empty for now - MPC implementation needed
+    let due_entries: Vec<DueSubscriptionInfo> = Vec::new();
 
     if !due_entries.is_empty() {
         emit!(SubscriptionsDue {

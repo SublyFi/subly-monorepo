@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::subly::constants::{BILLING_PERIOD_SECONDS, CONFIG_SEED, USER_SUBSCRIPTIONS_SEED};
+use crate::subly::constants::{CONFIG_SEED, USER_SUBSCRIPTIONS_SEED};
 use crate::subly::error::ErrorCode;
 use crate::subly::state::{SublyConfig, UserSubscriptions};
 
@@ -55,11 +55,21 @@ pub fn handler(
         .user_subscriptions
         .ensure_owner(user_key, user_bump);
 
-    ctx.accounts.user_subscriptions.record_payment(
-        args.subscription_id,
-        paid_ts,
-        BILLING_PERIOD_SECONDS,
-    )?;
+    // Find subscription to ensure it exists
+    let _subscription = ctx
+        .accounts
+        .user_subscriptions
+        .subscriptions
+        .iter()
+        .find(|s| s.id == args.subscription_id)
+        .ok_or(ErrorCode::SubscriptionNotFound)?;
+
+    // TODO: Queue update_subscription_metadata MPC instruction to update:
+    // - last_payment_ts
+    // - next_billing_ts
+    // - status (if needed)
+    msg!("NOTICE: Payment recording now requires MPC call to update_subscription_metadata");
+    msg!("This will update encrypted timestamps in encrypted_metadata field");
 
     emit!(SubscriptionPaymentRecorded {
         operator: ctx.accounts.operator.key(),

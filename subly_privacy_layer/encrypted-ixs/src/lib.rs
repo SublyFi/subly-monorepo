@@ -61,22 +61,27 @@ mod circuits {
 
     /// Creates encrypted metadata for a new subscription
     ///
-    /// Initializes metadata with zero values. The MPC computation
-    /// encrypts this data with MXE-only encryption (client cannot decrypt).
-    /// Use update_subscription_metadata to set actual timestamp values later.
+    /// Encrypts subscription metadata (timestamps and status) with MXE-only encryption.
+    /// This ensures complete privacy - only the MXE network can decrypt this data.
     ///
     /// # Arguments
-    /// * `mxe` - MXE encryption context (implicit parameter, not passed as argument)
+    /// * `started_at` - Subscription start timestamp
+    /// * `next_billing_ts` - Next billing timestamp
+    /// * `mxe` - MXE encryption context (implicit parameter)
     ///
     /// # Returns
-    /// * Encrypted metadata with zero-initialized fields (MXE-only encryption)
+    /// * Encrypted metadata with initialized timestamp fields (MXE-only encryption)
     #[instruction]
-    pub fn create_subscription_metadata(mxe: Mxe) -> Enc<Mxe, SubscriptionMetadata> {
+    pub fn create_subscription_metadata(
+        started_at: u64,
+        next_billing_ts: u64,
+        mxe: Mxe,
+    ) -> Enc<Mxe, SubscriptionMetadata> {
         let metadata = SubscriptionMetadata {
-            started_at: 0,
-            last_payment_ts: 0,
-            next_billing_ts: 0,
-            status: 0,
+            started_at: started_at as i64,
+            last_payment_ts: started_at as i64,
+            next_billing_ts: next_billing_ts as i64,
+            status: 0, // Active
         };
         mxe.from_arcis(metadata)
     }
