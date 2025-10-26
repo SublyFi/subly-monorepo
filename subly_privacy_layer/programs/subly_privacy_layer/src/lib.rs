@@ -2,6 +2,7 @@ pub mod subly;
 
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
+use arcium_client::idl::arcium::types::{CircuitSource, OffChainCircuitSource};
 use subly::instructions::cancel_subscription_metadata::CancelSubscriptionMetadataOutput;
 use subly::instructions::create_subscription_metadata::CreateSubscriptionMetadataOutput;
 use subly::instructions::subscribe_service::SubscribeServiceOutput;
@@ -140,7 +141,7 @@ const COMP_DEF_OFFSET_UPDATE_SUBSCRIPTION_METADATA: u32 =
 const COMP_DEF_OFFSET_CANCEL_SUBSCRIPTION_METADATA: u32 =
     comp_def_offset("cancel_subscription_metadata");
 
-declare_id!("HLSVfoqwhdrEpLn2XnvaywFWPM8Mi2rXvEu9vdZZNhyw");
+declare_id!("CKGaJ8QUBFuMSkB5wdk1R57Uj2Ypiy3FTfSHNNSb2yEV");
 
 #[arcium_program]
 pub mod subly_privacy_layer {
@@ -172,7 +173,16 @@ pub mod subly_privacy_layer {
     pub fn init_subscribe_service_comp_def(
         ctx: Context<InitSubscribeServiceCompDef>,
     ) -> Result<()> {
-        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        init_comp_def(
+            ctx.accounts,
+            true,
+            0,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/subscribe_service_testnet.arcis".to_string(),
+                hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
+            })),
+            None,
+        )?;
         Ok(())
     }
 
@@ -195,7 +205,15 @@ pub mod subly_privacy_layer {
     pub fn init_create_subscription_metadata_comp_def(
         ctx: Context<InitCreateSubscriptionMetadataCompDef>,
     ) -> Result<()> {
-        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        init_comp_def(
+            ctx.accounts, 
+            true, 
+            0, 
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/create_subscription_metadata_testnet.arcis".to_string(),
+                hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
+            })), 
+            None)?;
         Ok(())
     }
 
@@ -224,7 +242,15 @@ pub mod subly_privacy_layer {
     pub fn init_update_subscription_metadata_comp_def(
         ctx: Context<InitUpdateSubscriptionMetadataCompDef>,
     ) -> Result<()> {
-        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        init_comp_def(
+            ctx.accounts, 
+            true, 
+            0, 
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/update_subscription_metadata_testnet.arcis".to_string(),
+                hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
+            })), 
+            None)?;
         Ok(())
     }
 
@@ -247,7 +273,15 @@ pub mod subly_privacy_layer {
     pub fn init_cancel_subscription_metadata_comp_def(
         ctx: Context<InitCancelSubscriptionMetadataCompDef>,
     ) -> Result<()> {
-        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        init_comp_def(
+            ctx.accounts, 
+            true, 
+            0, 
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/cancel_subscription_metadata_testnet.arcis".to_string(),
+                hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
+            })), 
+            None)?;
         Ok(())
     }
 
