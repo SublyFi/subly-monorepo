@@ -2,10 +2,16 @@ pub mod subly;
 
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
+use subly::instructions::cancel_subscription_metadata::CancelSubscriptionMetadataOutput;
 use subly::instructions::create_subscription_metadata::CreateSubscriptionMetadataOutput;
 use subly::instructions::subscribe_service::SubscribeServiceOutput;
+use subly::instructions::update_subscription_metadata::UpdateSubscriptionMetadataOutput;
 
 pub use subly::constants as subly_constants;
+pub use subly::instructions::cancel_subscription_metadata::{
+    CancelSubscriptionMetadata, CancelSubscriptionMetadataArgs, CancelSubscriptionMetadataCallback,
+    InitCancelSubscriptionMetadataCompDef,
+};
 pub use subly::instructions::create_subscription_metadata::{
     CreateSubscriptionMetadata, CreateSubscriptionMetadataCallback,
     InitCreateSubscriptionMetadataCompDef,
@@ -32,6 +38,10 @@ pub use subly::instructions::sync_yield::{SyncYield, YieldSnapshot};
 pub use subly::instructions::unstake::Unstake;
 pub use subly::instructions::unsubscribe_service::{
     SubscriptionCancellationRequested, UnsubscribeService, UnsubscribeServiceArgs,
+};
+pub use subly::instructions::update_subscription_metadata::{
+    InitUpdateSubscriptionMetadataCompDef, UpdateSubscriptionMetadata,
+    UpdateSubscriptionMetadataArgs, UpdateSubscriptionMetadataCallback,
 };
 pub use subly::state::{
     PayPalRecipientType, StakeEntry, SublyConfig, SubscriptionRegistry, SubscriptionService,
@@ -98,11 +108,37 @@ pub mod __client_accounts_unsubscribe_service {
     pub use crate::subly::instructions::unsubscribe_service::__client_accounts_unsubscribe_service::*;
 }
 
+pub mod __client_accounts_init_update_subscription_metadata_comp_def {
+    pub use crate::subly::instructions::update_subscription_metadata::__client_accounts_init_update_subscription_metadata_comp_def::*;
+}
+
+pub mod __client_accounts_update_subscription_metadata {
+    pub use crate::subly::instructions::update_subscription_metadata::__client_accounts_update_subscription_metadata::*;
+}
+
+pub mod __client_accounts_update_subscription_metadata_callback {
+    pub use crate::subly::instructions::update_subscription_metadata::__client_accounts_update_subscription_metadata_callback::*;
+}
+
+pub mod __client_accounts_init_cancel_subscription_metadata_comp_def {
+    pub use crate::subly::instructions::cancel_subscription_metadata::__client_accounts_init_cancel_subscription_metadata_comp_def::*;
+}
+
+pub mod __client_accounts_cancel_subscription_metadata {
+    pub use crate::subly::instructions::cancel_subscription_metadata::__client_accounts_cancel_subscription_metadata::*;
+}
+
+pub mod __client_accounts_cancel_subscription_metadata_callback {
+    pub use crate::subly::instructions::cancel_subscription_metadata::__client_accounts_cancel_subscription_metadata_callback::*;
+}
+
 const COMP_DEF_OFFSET_SUBSCRIBE_SERVICE: u32 = comp_def_offset("subscribe_service");
 const COMP_DEF_OFFSET_CREATE_SUBSCRIPTION_METADATA: u32 =
     comp_def_offset("create_subscription_metadata");
 const COMP_DEF_OFFSET_UPDATE_SUBSCRIPTION_METADATA: u32 =
     comp_def_offset("update_subscription_metadata");
+const COMP_DEF_OFFSET_CANCEL_SUBSCRIPTION_METADATA: u32 =
+    comp_def_offset("cancel_subscription_metadata");
 
 declare_id!("HLSVfoqwhdrEpLn2XnvaywFWPM8Mi2rXvEu9vdZZNhyw");
 
@@ -183,6 +219,52 @@ pub mod subly_privacy_layer {
         output: ComputationOutputs<CreateSubscriptionMetadataOutput>,
     ) -> Result<()> {
         subly::instructions::create_subscription_metadata::handle_callback(ctx, output)
+    }
+
+    pub fn init_update_subscription_metadata_comp_def(
+        ctx: Context<InitUpdateSubscriptionMetadataCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
+
+    pub fn update_subscription_metadata(
+        ctx: Context<UpdateSubscriptionMetadata>,
+        computation_offset: u64,
+        args: UpdateSubscriptionMetadataArgs,
+    ) -> Result<()> {
+        subly::instructions::update_subscription_metadata::handler(ctx, computation_offset, args)
+    }
+
+    #[arcium_callback(encrypted_ix = "update_subscription_metadata")]
+    pub fn update_subscription_metadata_callback(
+        ctx: Context<UpdateSubscriptionMetadataCallback>,
+        output: ComputationOutputs<UpdateSubscriptionMetadataOutput>,
+    ) -> Result<()> {
+        subly::instructions::update_subscription_metadata::handle_callback(ctx, output)
+    }
+
+    pub fn init_cancel_subscription_metadata_comp_def(
+        ctx: Context<InitCancelSubscriptionMetadataCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
+
+    pub fn cancel_subscription_metadata(
+        ctx: Context<CancelSubscriptionMetadata>,
+        computation_offset: u64,
+        args: CancelSubscriptionMetadataArgs,
+    ) -> Result<()> {
+        subly::instructions::cancel_subscription_metadata::handler(ctx, computation_offset, args)
+    }
+
+    #[arcium_callback(encrypted_ix = "cancel_subscription_metadata")]
+    pub fn cancel_subscription_metadata_callback(
+        ctx: Context<CancelSubscriptionMetadataCallback>,
+        output: ComputationOutputs<CancelSubscriptionMetadataOutput>,
+    ) -> Result<()> {
+        subly::instructions::cancel_subscription_metadata::handle_callback(ctx, output)
     }
 
     pub fn register_paypal_recipient(

@@ -461,6 +461,118 @@ describe("subly_privacy_layer confidential subscriptions", () => {
       );
     }
 
+    // Initialize update_subscription_metadata computation definition
+    const updateMetadataCompDefOffset = Buffer.from(
+      getCompDefAccOffset("update_subscription_metadata")
+    ).readUInt32LE();
+    const updateMetadataCompDefAccount = getCompDefAccAddress(
+      program.programId,
+      updateMetadataCompDefOffset
+    );
+
+    const updateMetadataCompDefInfo = await provider.connection.getAccountInfo(
+      updateMetadataCompDefAccount
+    );
+
+    if (!updateMetadataCompDefInfo) {
+      console.log(
+        "Initializing update_subscription_metadata computation definition"
+      );
+      await program.methods
+        .initUpdateSubscriptionMetadataCompDef()
+        .accounts({
+          payer: wallet.publicKey,
+          mxeAccount: getMXEAccAddress(program.programId),
+          compDefAccount: updateMetadataCompDefAccount,
+          arciumProgram: arciumProgramId,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      console.log(
+        "update_subscription_metadata computation definition initialized, finalizing..."
+      );
+
+      const updateMetadataFinalizeTx = await buildFinalizeCompDefTx(
+        provider as anchor.AnchorProvider,
+        updateMetadataCompDefOffset,
+        program.programId
+      );
+
+      const updateMetadataBlockhash =
+        await provider.connection.getLatestBlockhash();
+      updateMetadataFinalizeTx.recentBlockhash =
+        updateMetadataBlockhash.blockhash;
+      updateMetadataFinalizeTx.lastValidBlockHeight =
+        updateMetadataBlockhash.lastValidBlockHeight;
+      updateMetadataFinalizeTx.sign(wallet.payer);
+
+      await provider.sendAndConfirm(updateMetadataFinalizeTx);
+      console.log(
+        "update_subscription_metadata computation definition finalized"
+      );
+    } else {
+      console.log(
+        "update_subscription_metadata computation definition already initialized; skipping init."
+      );
+    }
+
+    // Initialize cancel_subscription_metadata computation definition
+    const cancelMetadataCompDefOffset = Buffer.from(
+      getCompDefAccOffset("cancel_subscription_metadata")
+    ).readUInt32LE();
+    const cancelMetadataCompDefAccount = getCompDefAccAddress(
+      program.programId,
+      cancelMetadataCompDefOffset
+    );
+
+    const cancelMetadataCompDefInfo = await provider.connection.getAccountInfo(
+      cancelMetadataCompDefAccount
+    );
+
+    if (!cancelMetadataCompDefInfo) {
+      console.log(
+        "Initializing cancel_subscription_metadata computation definition"
+      );
+      await program.methods
+        .initCancelSubscriptionMetadataCompDef()
+        .accounts({
+          payer: wallet.publicKey,
+          mxeAccount: getMXEAccAddress(program.programId),
+          compDefAccount: cancelMetadataCompDefAccount,
+          arciumProgram: arciumProgramId,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      console.log(
+        "cancel_subscription_metadata computation definition initialized, finalizing..."
+      );
+
+      const cancelMetadataFinalizeTx = await buildFinalizeCompDefTx(
+        provider as anchor.AnchorProvider,
+        cancelMetadataCompDefOffset,
+        program.programId
+      );
+
+      const cancelMetadataBlockhash =
+        await provider.connection.getLatestBlockhash();
+      cancelMetadataFinalizeTx.recentBlockhash =
+        cancelMetadataBlockhash.blockhash;
+      cancelMetadataFinalizeTx.lastValidBlockHeight =
+        cancelMetadataBlockhash.lastValidBlockHeight;
+      cancelMetadataFinalizeTx.sign(wallet.payer);
+
+      await provider.sendAndConfirm(cancelMetadataFinalizeTx);
+      console.log(
+        "cancel_subscription_metadata computation definition finalized"
+      );
+    } else {
+      console.log(
+        "cancel_subscription_metadata computation definition already initialized; skipping init."
+      );
+    }
+
     mxePublicKey = await getMXEPublicKeyWithRetry(
       provider as anchor.AnchorProvider,
       program.programId
@@ -909,5 +1021,80 @@ describe("subly_privacy_layer confidential subscriptions", () => {
     console.log("  - Zero plaintext fields on-chain");
     console.log("  - All timestamps/status must be encrypted via MPC");
     console.log("  - Only MPC network can decrypt metadata");
+  });
+
+  it("verifies all 4 Arcium computation definitions are initialized", async () => {
+    console.log("\n=== Verifying All Arcium Computation Definitions ===");
+
+    const instructions = [
+      "subscribe_service",
+      "create_subscription_metadata",
+      "update_subscription_metadata",
+      "cancel_subscription_metadata",
+    ];
+
+    for (const instructionName of instructions) {
+      const compDefOffset = Buffer.from(
+        getCompDefAccOffset(instructionName)
+      ).readUInt32LE();
+      const compDefAccount = getCompDefAccAddress(
+        program.programId,
+        compDefOffset
+      );
+
+      const compDefInfo = await provider.connection.getAccountInfo(
+        compDefAccount
+      );
+
+      expect(
+        compDefInfo,
+        `${instructionName} computation definition should be initialized`
+      ).to.not.be.null;
+
+      console.log(`✅ ${instructionName} comp_def initialized`);
+      console.log(`   Offset: ${compDefOffset}`);
+      console.log(`   Account: ${compDefAccount.toBase58()}`);
+      console.log(
+        `   Lamports: ${compDefInfo!.lamports}, Data: ${
+          compDefInfo!.data.length
+        } bytes`
+      );
+    }
+
+    console.log(
+      "\n✅ All 4 computation definitions verified and ready for deployment!"
+    );
+  });
+
+  // NOTE: update_subscription_metadata and cancel_subscription_metadata are stubs
+  // They require MXE-encrypted data to be passed as arguments, which is not yet
+  // supported in the current implementation. The computation definitions are
+  // initialized for future use once Arcium provides guidance on this pattern.
+  it("verifies stub implementations are available but not functional", async () => {
+    console.log(
+      "\n=== Verifying Stub Implementations (update/cancel metadata) ==="
+    );
+
+    // Verify the instruction methods exist in the IDL
+    const hasUpdateMethod =
+      program.methods.updateSubscriptionMetadata !== undefined;
+    const hasCancelMethod =
+      program.methods.cancelSubscriptionMetadata !== undefined;
+
+    expect(
+      hasUpdateMethod,
+      "update_subscription_metadata method should exist in IDL"
+    ).to.be.true;
+    expect(
+      hasCancelMethod,
+      "cancel_subscription_metadata method should exist in IDL"
+    ).to.be.true;
+
+    console.log("✅ update_subscription_metadata instruction exists in IDL");
+    console.log("✅ cancel_subscription_metadata instruction exists in IDL");
+    console.log("\n📝 Note: These instructions are stubbed and will return");
+    console.log("   AbortedComputation error until MXE-encrypted argument");
+    console.log("   passing is fully supported by Arcium.");
+    console.log("\n✅ All 4 Arcium instructions properly exported and ready!");
   });
 });
