@@ -4,80 +4,11 @@
  */
 
 import { Connection, PublicKey } from "@solana/web3.js";
-import { x25519 } from "@noble/curves/ed25519";
+import { RescueCipher, x25519 } from "@arcium-hq/client";
 import { randomBytes } from "crypto";
 
-/**
- * Rescue cipher implementation for Arcium encryption
- * Based on @arcium-hq/client RescueCipher
- */
-export class RescueCipher {
-  private sharedSecret: Uint8Array;
-
-  constructor(sharedSecret: Uint8Array) {
-    this.sharedSecret = sharedSecret;
-  }
-
-  /**
-   * Encrypt plaintext values using Rescue cipher
-   * @param plaintexts - Array of bigint values to encrypt
-   * @param nonce - 16-byte nonce for encryption
-   * @returns Array of 32-byte ciphertexts
-   */
-  encrypt(plaintexts: bigint[], nonce: Uint8Array): Uint8Array[] {
-    if (nonce.length !== 16) {
-      throw new Error("Nonce must be 16 bytes");
-    }
-
-    // TODO: Implement actual Rescue cipher encryption
-    // For now, this is a placeholder that needs to be replaced with the real implementation
-    // The actual implementation should use the Rescue hash function
-
-    console.warn(
-      "RescueCipher.encrypt is not fully implemented - using placeholder"
-    );
-
-    return plaintexts.map((value) => {
-      // Placeholder: just convert bigint to 32 bytes
-      const bytes = new Uint8Array(32);
-      const hex = value.toString(16).padStart(64, "0");
-      for (let i = 0; i < 32; i++) {
-        bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-      }
-      return bytes;
-    });
-  }
-
-  /**
-   * Decrypt ciphertexts using Rescue cipher
-   * @param ciphertexts - Array of 32-byte ciphertexts
-   * @param nonce - 16-byte nonce used for encryption
-   * @returns Array of decrypted bigint values
-   */
-  decrypt(ciphertexts: Uint8Array[], nonce: Uint8Array): bigint[] {
-    if (nonce.length !== 16) {
-      throw new Error("Nonce must be 16 bytes");
-    }
-
-    // TODO: Implement actual Rescue cipher decryption
-    console.warn(
-      "RescueCipher.decrypt is not fully implemented - using placeholder"
-    );
-
-    return ciphertexts.map((ciphertext) => {
-      if (ciphertext.length !== 32) {
-        throw new Error("Ciphertext must be 32 bytes");
-      }
-
-      // Placeholder: just convert bytes to bigint
-      let value = 0n;
-      for (let i = 0; i < 32; i++) {
-        value = (value << 8n) | BigInt(ciphertext[i]);
-      }
-      return value;
-    });
-  }
-}
+// Re-export RescueCipher for use in other modules
+export { RescueCipher };
 
 /**
  * Get MXE public key for the Subly program
@@ -112,7 +43,7 @@ export async function getMXEPublicKey(
  * @returns Object with private key, public key, and cipher
  */
 export function generateClientKeypair(mxePublicKey: Uint8Array) {
-  const clientSecretKey = x25519.utils.randomPrivateKey();
+  const clientSecretKey = x25519.utils.randomSecretKey();
   const clientPublicKey = x25519.getPublicKey(clientSecretKey);
   const sharedSecret = x25519.getSharedSecret(clientSecretKey, mxePublicKey);
 
@@ -134,7 +65,7 @@ export function createSharedEncryptionBundle(
 ): {
   nonce: Uint8Array;
   encryptionKey: Uint8Array;
-  ciphertexts: Uint8Array[];
+  ciphertexts: number[][];
 } {
   const nonce = randomBytes(16);
   const ciphertexts = cipher.encrypt(values, nonce);
@@ -142,7 +73,7 @@ export function createSharedEncryptionBundle(
   return {
     nonce,
     encryptionKey: clientPublicKey,
-    ciphertexts,
+    ciphertexts: ciphertexts.map((ct) => Array.from(ct)),
   };
 }
 
@@ -157,11 +88,10 @@ export function decryptConfidentialBundle(
     nonce: number[];
   }
 ): bigint[] {
-  const ciphertexts = bundle.ciphertexts
-    .slice(0, bundle.ciphertextCount)
-    .map((ct) => Uint8Array.from(ct));
+  const ciphertexts = bundle.ciphertexts.slice(0, bundle.ciphertextCount);
+  const nonce = Uint8Array.from(bundle.nonce);
 
-  return cipher.decrypt(ciphertexts, Uint8Array.from(bundle.nonce));
+  return cipher.decrypt(ciphertexts, nonce);
 }
 
 /**

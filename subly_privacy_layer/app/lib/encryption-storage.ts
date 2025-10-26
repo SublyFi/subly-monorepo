@@ -3,8 +3,7 @@
  * Handles storage and retrieval of client secret keys for subscription decryption
  */
 
-import { x25519 } from "@noble/curves/ed25519";
-import { RescueCipher } from "./arcium-client";
+import { x25519, RescueCipher } from "@arcium-hq/client";
 
 const STORAGE_KEY_PREFIX = "subly_arcium_";
 
@@ -80,7 +79,7 @@ export function getOrCreateCipher(
 
   if (!secretKey) {
     // Generate new secret key
-    secretKey = x25519.utils.randomPrivateKey();
+    secretKey = x25519.utils.randomSecretKey();
     storeClientSecretKey(walletAddress, secretKey);
     isNew = true;
   }
@@ -111,11 +110,10 @@ export function decryptWithStoredKey(
   try {
     const { cipher } = getOrCreateCipher(walletAddress, mxePublicKey);
 
-    const ciphertexts = bundle.ciphertexts
-      .slice(0, bundle.ciphertextCount)
-      .map((ct) => Uint8Array.from(ct));
+    const ciphertexts = bundle.ciphertexts.slice(0, bundle.ciphertextCount);
+    const nonce = Uint8Array.from(bundle.nonce);
 
-    return cipher.decrypt(ciphertexts, Uint8Array.from(bundle.nonce));
+    return cipher.decrypt(ciphertexts, nonce);
   } catch (error) {
     console.error("Decryption failed:", error);
     return null;
