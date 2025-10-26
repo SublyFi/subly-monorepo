@@ -13,3 +13,9 @@ Deploy success
 Initializing MXE account...
 Success: 5ChXxeg5TJk6CVZzHJsbwUrus7ofPuSxhCF9Kcb1KA8i6vyqU5tXpV7bQrndc4EiQMKuffEfcfdaHz1WDP52BRY1
 ```
+
+フロントからは下記でうまく行った。
+
+```
+CKGaJ8QUBFuMSkB5wdk1R57Uj2Ypiy3FTfSHNNSb2yEV
+```

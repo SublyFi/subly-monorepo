@@ -4,8 +4,13 @@
  */
 
 import { Connection, PublicKey } from "@solana/web3.js";
-import { RescueCipher, x25519 } from "@arcium-hq/client";
+import {
+  RescueCipher,
+  x25519,
+  getMXEPublicKey as getArciumMXEPublicKey,
+} from "@arcium-hq/client";
 import { randomBytes } from "crypto";
+import { AnchorProvider } from "@coral-xyz/anchor";
 
 // Re-export RescueCipher for use in other modules
 export { RescueCipher };
@@ -13,27 +18,26 @@ export { RescueCipher };
 /**
  * Get MXE public key for the Subly program
  * @param connection - Solana connection
- * @param programId - Subly program ID
+ * @param programId - MXE program ID
  * @returns MXE public key as Uint8Array
  */
 export async function getMXEPublicKey(
   connection: Connection,
   programId: PublicKey
 ): Promise<Uint8Array> {
-  // Derive MXE account PDA
-  const [mxeAccount] = PublicKey.findProgramAddressSync(
-    [Buffer.from("mxe")],
-    new PublicKey("BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6") // Arcium program ID
+  // Create a minimal AnchorProvider for the Arcium SDK
+  // Note: wallet is not needed for read-only operations
+  const provider = new AnchorProvider(
+    connection,
+    {} as any, // Wallet not needed for read-only
+    AnchorProvider.defaultOptions()
   );
 
-  const accountInfo = await connection.getAccountInfo(mxeAccount);
-  if (!accountInfo) {
-    throw new Error("MXE account not found");
-  }
+  const mxePublicKey = await getArciumMXEPublicKey(provider, programId);
 
-  // MXE public key is stored in the account data
-  // Format: [discriminator(8), public_key(32), ...]
-  const mxePublicKey = accountInfo.data.slice(8, 40);
+  if (!mxePublicKey) {
+    throw new Error("MXE account not found or public key not set");
+  }
 
   return mxePublicKey;
 }

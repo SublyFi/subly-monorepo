@@ -12,6 +12,7 @@
     "@abstract-foundation/agw-client": "^1.9.1",
     "@arcium-hq/client": "^0.3.0",
     "@bonfida/spl-name-service": "^3.0.16",
+    "@coral-xyz/anchor": "^0.32.1",
     "@hookform/resolvers": "^3.10.0",
     "@noble/curves": "^2.0.1",
     "@privy-io/react-auth": "^3.0.1",
