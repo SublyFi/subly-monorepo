@@ -1,0 +1,28 @@
+[package]
+name = "subly_privacy_layer"
+version = "0.1.0"
+description = "Created with Arcium & Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "subly_privacy_layer"
+
+[features]
+default = ["init-if-needed"]
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+anchor-debug = ["anchor-lang/anchor-debug", "anchor-spl/anchor-debug"]
+custom-heap = []
+custom-panic = []
+init-if-needed = ["anchor-lang/init-if-needed"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+arcium-client = { default-features = false, version = "0.3.0" }
+arcium-macros = "0.3.0"
+arcium-anchor = "0.3.1"
+anchor-spl = "0.31.1"
