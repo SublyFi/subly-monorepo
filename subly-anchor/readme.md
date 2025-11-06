@@ -1,6 +1,6 @@
 # Subly Solana Program
 
-## デプロイ情報
+## Deploy information
 
 ```
 Deploying program "subly_solana_program"...
@@ -24,11 +24,11 @@ Signature: 53e8gNTNnfr2DF9rLbESSrJVijHgnvNGNMVVxWjeqWHKFNo7j3tTntqDDMJHV9cjT6jSk
 Deploy success
 ```
 
-## 環境変数の設定
+## Environment Variables Setup
 
-### ルートディレクトリ（バックエンド & スクリプト）
+### Root Directory (Backend & Scripts)
 
-`/.env` に以下を記載しておくと、各種スクリプトがそのまま利用できます。
+Add the following to `/.env` to use the various scripts as-is.
 
 ```bash
 ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
@@ -44,58 +44,58 @@ COMMITMENT=confirmed
 NEW_SUBS_START_SLOT=0
 NEW_SUBS_FETCH_LIMIT=100
 NEW_SUBS_MAX_TX=1000
-LOOK_AHEAD_SECONDS=86400      # process-subscriptions.ts 用
-BATCH_SIZE=16                 # process-subscriptions.ts 用
+LOOK_AHEAD_SECONDS=86400      # for process-subscriptions.ts
+BATCH_SIZE=16                 # for process-subscriptions.ts
 ```
 
-> `ANCHOR_WALLET` には契約オペレーター（config authority）の秘密鍵を指定してください。PayPal の資格情報はサンドボックス用を推奨します。
+> Set `ANCHOR_WALLET` to the secret key of the contract operator (config authority). PayPal credentials should be for the sandbox environment.
 
-### フロントエンド (`frontend/.env.local`)
+### Frontend (`frontend/.env.local`)
 
 ```bash
 NEXT_PUBLIC_SUBLY_PROGRAM_ID=GJvB3qPb5UmRoWADHWxgwfepEbTbCMwryzWKaBq3Ys22
 NEXT_PUBLIC_SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com
 NEXT_PUBLIC_SOLANA_RPC_WEBSOCKET=wss://api.devnet.solana.com
-NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id   # Privy を使わない場合は未設定で可
+NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id   # Can be left unset if not using Privy
 ```
 
-## スクリプトの使い方
+## How to Use Scripts
 
 ### initialize-devnet.ts
 
-- 用途: `config` / `subscription_registry` / `vault` などの初期 PDA を作成。
-- 実行: `anchor run initialize-devnet` もしくは `npx ts-node --project tsconfig.json scripts/initialize-devnet.ts`
-- 前提: `ANCHOR_PROVIDER_URL` と `ANCHOR_WALLET` が正しく設定され、対象プログラムがデプロイ済みであること。
-- 備考: 既にアカウントが存在する場合はスクリプトがスキップします。再初期化したい場合は既存 PDA をクローズしてから実行してください。
+- Purpose: Create initial PDAs such as `config` / `subscription_registry` / `vault`.
+- Execution: `anchor run initialize-devnet` or `npx ts-node --project tsconfig.json scripts/initialize-devnet.ts`
+- Prerequisites: `ANCHOR_PROVIDER_URL` and `ANCHOR_WALLET` must be properly configured, and the target program must be deployed.
+- Notes: If accounts already exist, the script will skip them. To reinitialize, close existing PDAs before running.
 
 ### register-subscription-services.ts
 
-- 用途: JSON で定義したサブスクリプションサービスを一括登録。
-- デフォルト入力: `scripts/subscription-services.json`
-- 実行例: `anchor run register-services` または `yarn register-subscription-services path/to/file.json`
-- 備考: `subscription_registry` が初期化済みであることが前提です。既に登録済みのサービス名はスキップされます。
+- Purpose: Bulk registration of subscription services defined in JSON.
+- Default input: `scripts/subscription-services.json`
+- Execution example: `anchor run register-services` or `yarn register-subscription-services path/to/file.json`
+- Notes: Assumes `subscription_registry` has been initialized. Already registered service names will be skipped.
 
 ### process-new-subscriptions.ts
 
-- 用途: `SubscriptionActivated` イベントを追跡し、初回支払いを PayPal へ送金。オンチェーンの `initial_payment_recorded` フラグを見て重複送金を避けます。
-- 実行例: `npx ts-node --project tsconfig.json scripts/process-new-subscriptions.ts`
-- 必須環境: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `ANCHOR_PROVIDER_URL`, `ANCHOR_WALLET`
-- 備考: config authority のウォレットで実行してください。`NEW_SUBS_*` 環境変数でスキャン範囲を調整できます。
+- Purpose: Track `SubscriptionActivated` events and send initial payment to PayPal. Checks the on-chain `initial_payment_recorded` flag to avoid duplicate payments.
+- Execution example: `npx ts-node --project tsconfig.json scripts/process-new-subscriptions.ts`
+- Required environment: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `ANCHOR_PROVIDER_URL`, `ANCHOR_WALLET`
+- Notes: Execute with the config authority wallet. Scan range can be adjusted with `NEW_SUBS_*` environment variables.
 
 ### process-subscriptions.ts
 
-- 用途: `find_due_subscriptions` を用いて近々期限が来るサブスクリプションを探し、PayPal 送金と `record_subscription_payment` を実行。
-- 実行例: `npx ts-node --project tsconfig.json scripts/process-subscriptions.ts`
-- 主な環境変数: `LOOK_AHEAD_SECONDS`, `BATCH_SIZE`（デフォルト: 24h / 16 件）
-- 備考: 定期ジョブとして実行する想定です。こちらも config authority ウォレットを使用します。
+- Purpose: Use `find_due_subscriptions` to find subscriptions that are coming due soon, then execute PayPal payment and `record_subscription_payment`.
+- Execution example: `npx ts-node --project tsconfig.json scripts/process-subscriptions.ts`
+- Main environment variables: `LOOK_AHEAD_SECONDS`, `BATCH_SIZE` (defaults: 24h / 16 items)
+- Notes: Intended to be run as a scheduled job. Also uses the config authority wallet.
 
 ### paypal-client.ts
 
-- 直接実行するスクリプトではありません。PayPal REST API 呼び出しをまとめたユーティリティで、上記 2 つのバッチスクリプトから利用されています。
+- Not a directly executable script. This is a utility that consolidates PayPal REST API calls, used by the above two batch scripts.
 
 ### subscription-services.json
 
-- `register-subscription-services.ts` で読み込むデフォルトのサービス定義ファイルです。以下のようなフォーマットでサービスを追加します。
+- Default service definition file read by `register-subscription-services.ts`. Add services in the following format:
 
 ```json
 [
@@ -109,24 +109,24 @@ NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id   # Privy を使わない場合は未
 ]
 ```
 
-## 初期化とセットアップまとめ
+## Initialization and Setup Summary
 
-- ルートで `yarn install` を実行し依存関係をインストールします。
-- `.env` / `frontend/.env.local` を上記の例を参考に用意します。
-- `anchor run initialize-devnet` で初期 PDA を作成します。
-- 必要に応じて `anchor run register-services` でサブスクサービスを登録します。
-- PayPal 資格情報を設定した上で
+- Run `yarn install` in the root directory to install dependencies.
+- Prepare `.env` / `frontend/.env.local` referring to the examples above.
+- Run `anchor run initialize-devnet` to create initial PDAs.
+- If needed, run `anchor run register-services` to register subscription services.
+- After setting up PayPal credentials:
   - `npx ts-node --project tsconfig.json scripts/process-new-subscriptions.ts`
   - `npx ts-node --project tsconfig.json scripts/process-subscriptions.ts`
-    を定期的に実行すると、初回支払いと月次支払いが自動化されます。
+    Run these periodically to automate initial and monthly payments.
 
-## フロントエンドから Stake / Subscribe / Profile を操作する
+## Operating Stake / Subscribe / Profile from the Frontend
 
-- `cd frontend && pnpm install` で依存関係をインストールし、`pnpm dev` でローカルサーバーを起動します。
-- `NEXT_PUBLIC_SUBLY_PROGRAM_ID` および RPC エンドポイントを設定した状態で Privy を使ってウォレットを接続します。
-- Stake タブ: 所持 USDC 残高とステーク量を確認しながら入出金が可能です。
-- Subscription タブ: 登録済みサービスの一覧を取得し、所持したステーキング利回りが足りる範囲で Subscribe / Unsubscribe が行えます。
-- Profile タブ: PayPal 情報の登録・更新が可能です（サブスク利用前に必須）。
+- Run `cd frontend && pnpm install` to install dependencies, then `pnpm dev` to start the local server.
+- Connect your wallet using Privy with `NEXT_PUBLIC_SUBLY_PROGRAM_ID` and RPC endpoints configured.
+- Stake tab: Check your USDC balance and stake amount while depositing/withdrawing.
+- Subscription tab: Retrieve the list of registered services and Subscribe / Unsubscribe within your staking yield capacity.
+- Profile tab: Register/update PayPal information (required before using subscriptions).
 
 # Initialize
 
