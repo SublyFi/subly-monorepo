@@ -1,10 +1,10 @@
-import anchor from "@coral-xyz/anchor";
+import * as anchor from "@coral-xyz/anchor";
 import type { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import fs from "fs";
 import path from "path";
 
-import type { SublySolanaProgram } from "../programs/subly-solana-program/types/subly_solana_program";
+import type { SublySolanaProgram } from "../target/types/subly_solana_program";
 
 const SUBSCRIPTION_REGISTRY_SEED = "subscription_registry";
 const USDC_DECIMALS = 6;
