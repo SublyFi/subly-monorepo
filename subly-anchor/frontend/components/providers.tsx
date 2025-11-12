@@ -3,66 +3,46 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 
-import { PrivyProvider } from "@privy-io/react-auth";
-import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
-
-import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
-
-const DEVNET_HTTP_ENDPOINT =
-  process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT ??
-  "https://api.devnet.solana.com";
-const DEVNET_WS_ENDPOINT =
-  process.env.NEXT_PUBLIC_SOLANA_RPC_WEBSOCKET ?? "wss://api.devnet.solana.com";
+import { AddressType } from "@phantom/browser-sdk";
+import type { PhantomSDKConfig } from "@phantom/react-sdk";
+import { PhantomProvider } from "@phantom/react-sdk";
 
 interface ProvidersProps {
   children: ReactNode;
 }
 
 export function Providers({ children }: ProvidersProps) {
-  const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  const phantomAppId = process.env.NEXT_PUBLIC_PHANTOM_APP_ID;
+  const phantomRedirectUrl = process.env.NEXT_PUBLIC_PHANTOM_REDIRECT_URL;
+  const phantomAuthUrl =
+    process.env.NEXT_PUBLIC_PHANTOM_AUTH_URL ??
+    "https://connect.phantom.app/login";
 
-  const privyConfig = useMemo(() => {
-    const rpc = createSolanaRpc(DEVNET_HTTP_ENDPOINT);
-    const rpcSubscriptions = createSolanaRpcSubscriptions(DEVNET_WS_ENDPOINT);
+  const phantomConfig = useMemo<PhantomSDKConfig | null>(() => {
+    if (!phantomAppId || !phantomRedirectUrl) {
+      return null;
+    }
 
     return {
-      appearance: {
-        walletChainType: "solana-only" as const,
-        walletList: [
-          "detected_solana_wallets",
-          "phantom",
-          "solflare",
-          "backpack",
-          "metamask",
-        ],
+      providerType: "embedded",
+      addressTypes: [AddressType.solana],
+      appId: phantomAppId,
+      authOptions: {
+        authUrl: phantomAuthUrl,
+        redirectUrl: phantomRedirectUrl,
       },
-      solana: {
-        rpcs: {
-          "solana:devnet": {
-            rpc,
-            rpcSubscriptions,
-            blockExplorerUrl: "https://explorer.solana.com?cluster=devnet",
-          },
-        },
-      },
-      externalWallets: {
-        solana: { connectors: toSolanaWalletConnectors() },
-      },
+      autoConnect: true,
     };
-  }, []);
+  }, [phantomAppId, phantomAuthUrl, phantomRedirectUrl]);
 
-  if (!privyAppId) {
+  if (!phantomConfig) {
     if (process.env.NODE_ENV !== "production") {
       console.warn(
-        "NEXT_PUBLIC_PRIVY_APP_ID is not set. PrivyProvider will not be initialized."
+        "PhantomProvider is not initialized. Set NEXT_PUBLIC_PHANTOM_APP_ID and NEXT_PUBLIC_PHANTOM_REDIRECT_URL."
       );
     }
     return <>{children}</>;
   }
 
-  return (
-    <PrivyProvider appId={privyAppId} config={privyConfig}>
-      {children}
-    </PrivyProvider>
-  );
+  return <PhantomProvider config={phantomConfig}>{children}</PhantomProvider>;
 }

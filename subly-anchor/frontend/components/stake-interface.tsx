@@ -1,10 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { usePrivy } from "@privy-io/react-auth"
-import { useSignAndSendTransaction, useWallets } from "@privy-io/react-auth/solana"
 import { Connection, PublicKey } from "@solana/web3.js"
-import bs58 from "bs58"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -13,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { usePhantomWallet } from "@/hooks/use-phantom-wallet"
 import {
   fetchSublyConfig,
   fetchUserStakeEntries,
@@ -39,13 +37,12 @@ export function StakeInterface() {
   const [usdcBalance, setUsdcBalance] = useState<bigint>(0n)
   const [isBalanceLoading, setIsBalanceLoading] = useState(false)
 
-  const { ready, authenticated } = usePrivy()
-  const { wallets, ready: walletsReady } = useWallets()
-  const { signAndSendTransaction } = useSignAndSendTransaction()
-
-  const activeWallet = wallets[0]
-  const walletConnected =
-    ready && authenticated && walletsReady && Boolean(activeWallet?.address)
+  const {
+    solana,
+    solanaAddress,
+    isConnected: walletConnected,
+  } = usePhantomWallet()
+  const walletAddress = solanaAddress
 
   const connection = useMemo(
     () => new Connection(DEVNET_ENDPOINT, "confirmed"),
@@ -71,7 +68,7 @@ export function StakeInterface() {
   }, [])
 
   const loadBalance = useCallback(async () => {
-    if (!walletConnected || !activeWallet?.address) {
+    if (!walletConnected || !walletAddress) {
       setUsdcBalance(0n)
       return
     }
@@ -79,7 +76,7 @@ export function StakeInterface() {
     try {
       setIsBalanceLoading(true)
       const config = await fetchSublyConfig(connection)
-      const userPk = new PublicKey(activeWallet.address)
+      const userPk = new PublicKey(walletAddress)
       const ata = await getAssociatedTokenAddress(config.usdcMint, userPk)
       const balance = await connection
         .getTokenAccountBalance(ata)
@@ -97,17 +94,17 @@ export function StakeInterface() {
     } finally {
       setIsBalanceLoading(false)
     }
-  }, [activeWallet, connection, walletConnected])
+  }, [connection, walletAddress, walletConnected])
 
   const loadTranches = useCallback(async () => {
-    if (!walletConnected || !activeWallet?.address) {
+    if (!walletConnected || !walletAddress) {
       resetTranches()
       return
     }
 
     try {
       setIsFetchingTranches(true)
-      const userPk = new PublicKey(activeWallet.address)
+      const userPk = new PublicKey(walletAddress)
       const entries = await fetchUserStakeEntries(connection, userPk)
       const now = Math.floor(Date.now() / 1000)
 
@@ -138,7 +135,7 @@ export function StakeInterface() {
     } finally {
       setIsFetchingTranches(false)
     }
-  }, [activeWallet, connection, resetTranches, walletConnected])
+  }, [connection, resetTranches, walletAddress, walletConnected])
 
   const selectedTranche = useMemo(
     () => availableTranches.find((entry) => entry.trancheId === selectedTrancheId) ?? null,
@@ -146,7 +143,7 @@ export function StakeInterface() {
   )
 
   const handleStake = useCallback(async () => {
-    if (!walletConnected || !activeWallet?.address) {
+    if (!walletConnected || !walletAddress) {
       toast.error("Connect a wallet before staking")
       return
     }
@@ -155,7 +152,7 @@ export function StakeInterface() {
       setIsStaking(true)
 
       const amount = parseUsdcAmount(stakeAmount)
-      const userPublicKey = new PublicKey(activeWallet.address)
+      const userPublicKey = new PublicKey(walletAddress)
       const formattedStakeAmount = formatUsdcAmountDisplay(stakeAmount || "0")
 
       const { transaction, blockhash } = await prepareStakeTransaction(
@@ -164,14 +161,9 @@ export function StakeInterface() {
         amount,
       )
 
-      const serialized = transaction.serialize({ requireAllSignatures: false })
-      const { signature } = await signAndSendTransaction({
-        transaction: serialized,
-        wallet: activeWallet,
-        chain: "solana:devnet",
-      })
-
-      const signatureString = bs58.encode(signature)
+      const { signature: signatureString } = await solana.signAndSendTransaction(
+        transaction,
+      )
 
       await connection.confirmTransaction(
         {
@@ -207,25 +199,17 @@ export function StakeInterface() {
     } finally {
       setIsStaking(false)
     }
-  }, [
-    activeWallet,
-    connection,
-    loadBalance,
-    loadTranches,
-    signAndSendTransaction,
-    stakeAmount,
-    walletConnected,
-  ])
+  }, [connection, loadBalance, loadTranches, solana, stakeAmount, walletAddress, walletConnected])
 
   const handleUnstake = useCallback(async () => {
-    if (!walletConnected || !activeWallet?.address || selectedTrancheId === null) {
+    if (!walletConnected || !walletAddress || selectedTrancheId === null) {
       toast.error("Select a tranche to unstake")
       return
     }
 
     try {
       setIsUnstaking(true)
-      const userPublicKey = new PublicKey(activeWallet.address)
+      const userPublicKey = new PublicKey(walletAddress)
 
       const { transaction, blockhash } = await prepareUnstakeTransaction(
         connection,
@@ -233,14 +217,9 @@ export function StakeInterface() {
         selectedTrancheId,
       )
 
-      const serialized = transaction.serialize({ requireAllSignatures: false })
-      const { signature } = await signAndSendTransaction({
-        transaction: serialized,
-        wallet: activeWallet,
-        chain: "solana:devnet",
-      })
-
-      const signatureString = bs58.encode(signature)
+      const { signature: signatureString } = await solana.signAndSendTransaction(
+        transaction,
+      )
 
       await connection.confirmTransaction(
         {
@@ -283,13 +262,13 @@ export function StakeInterface() {
       setIsUnstaking(false)
     }
   }, [
-    activeWallet,
     connection,
     loadBalance,
     loadTranches,
     selectedTranche,
     selectedTrancheId,
-    signAndSendTransaction,
+    solana,
+    walletAddress,
     walletConnected,
   ])
 

@@ -56,7 +56,10 @@ BATCH_SIZE=16                 # for process-subscriptions.ts
 NEXT_PUBLIC_SUBLY_PROGRAM_ID=GJvB3qPb5UmRoWADHWxgwfepEbTbCMwryzWKaBq3Ys22
 NEXT_PUBLIC_SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com
 NEXT_PUBLIC_SOLANA_RPC_WEBSOCKET=wss://api.devnet.solana.com
-NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id   # Can be left unset if not using Privy
+NEXT_PUBLIC_PHANTOM_APP_ID=your_phantom_app_id
+NEXT_PUBLIC_PHANTOM_REDIRECT_URL=http://localhost:3000/phantom/callback
+# Optional override (defaults to https://connect.phantom.app/login)
+NEXT_PUBLIC_PHANTOM_AUTH_URL=https://connect.phantom.app/login
 ```
 
 ## How to Use Scripts
@@ -123,7 +126,7 @@ NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id   # Can be left unset if not using Pr
 ## Operating Stake / Subscribe / Profile from the Frontend
 
 - Run `cd frontend && pnpm install` to install dependencies, then `pnpm dev` to start the local server.
-- Connect your wallet using Privy with `NEXT_PUBLIC_SUBLY_PROGRAM_ID` and RPC endpoints configured.
+- Connect your wallet through Phantom Connect (embedded wallet) after configuring the `NEXT_PUBLIC_PHANTOM_*` variables along with `NEXT_PUBLIC_SUBLY_PROGRAM_ID` and RPC endpoints.
 - Stake tab: Check your USDC balance and stake amount while depositing/withdrawing.
 - Subscription tab: Retrieve the list of registered services and Subscribe / Unsubscribe within your staking yield capacity.
 - Profile tab: Register/update PayPal information (required before using subscriptions).

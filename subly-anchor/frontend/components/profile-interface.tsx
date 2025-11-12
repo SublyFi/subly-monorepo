@@ -1,16 +1,14 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { usePrivy } from "@privy-io/react-auth"
-import { useSignAndSendTransaction, useWallets } from "@privy-io/react-auth/solana"
 import { Connection, PublicKey } from "@solana/web3.js"
-import bs58 from "bs58"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckCircle, Edit, Loader2, Mail, XCircle } from "lucide-react"
+import { usePhantomWallet } from "@/hooks/use-phantom-wallet"
 
 import {
   fetchPayPalRecipient,
@@ -82,13 +80,12 @@ export function ProfileInterface() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
-  const { ready, authenticated } = usePrivy()
-  const { wallets, ready: walletsReady } = useWallets()
-  const { signAndSendTransaction } = useSignAndSendTransaction()
-
-  const activeWallet = wallets[0]
-  const walletConnected =
-    ready && authenticated && walletsReady && Boolean(activeWallet?.address)
+  const {
+    solana,
+    solanaAddress,
+    isConnected: walletConnected,
+  } = usePhantomWallet()
+  const walletAddress = solanaAddress
 
   const connection = useMemo(
     () => new Connection(DEVNET_ENDPOINT, "confirmed"),
@@ -106,14 +103,14 @@ export function ProfileInterface() {
   }, [])
 
   const loadPayPalInfo = useCallback(async () => {
-    if (!walletConnected || !activeWallet?.address) {
+    if (!walletConnected || !walletAddress) {
       setPaypalInfo(null)
       return
     }
 
     try {
       setIsLoading(true)
-      const userPk = new PublicKey(activeWallet.address)
+      const userPk = new PublicKey(walletAddress)
       const details = await fetchPayPalRecipient(connection, userPk)
 
       if (!details || !details.configured || !details.receiver) {
@@ -132,12 +129,7 @@ export function ProfileInterface() {
     } finally {
       setIsLoading(false)
     }
-  }, [
-    activeWallet,
-    connection,
-    mapRecipientDetailsToInfo,
-    walletConnected,
-  ])
+  }, [connection, mapRecipientDetailsToInfo, walletAddress, walletConnected])
 
   useEffect(() => {
     void loadPayPalInfo()
@@ -161,7 +153,7 @@ export function ProfileInterface() {
   }
 
   const handleSavePaypal = useCallback(async () => {
-    if (!walletConnected || !activeWallet?.address) {
+    if (!walletConnected || !walletAddress) {
       toast.error("Connect your wallet before saving PayPal information")
       return
     }
@@ -175,7 +167,7 @@ export function ProfileInterface() {
     try {
       setIsSaving(true)
 
-      const userPk = new PublicKey(activeWallet.address)
+      const userPk = new PublicKey(walletAddress)
       const { transaction, blockhash } = await prepareRegisterPayPalRecipientTransaction(
         connection,
         userPk,
@@ -185,14 +177,9 @@ export function ProfileInterface() {
         },
       )
 
-      const serialized = transaction.serialize({ requireAllSignatures: false })
-      const { signature } = await signAndSendTransaction({
-        transaction: serialized,
-        wallet: activeWallet,
-        chain: "solana:devnet",
-      })
-
-      const signatureString = bs58.encode(signature)
+      const { signature: signatureString } = await solana.signAndSendTransaction(
+        transaction,
+      )
 
       await connection.confirmTransaction(
         {
@@ -229,12 +216,12 @@ export function ProfileInterface() {
       setIsSaving(false)
     }
   }, [
-    activeWallet,
     connection,
     loadPayPalInfo,
     paypalType,
     paypalValue,
-    signAndSendTransaction,
+    solana,
+    walletAddress,
     walletConnected,
   ])
 

@@ -1,16 +1,14 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { usePrivy } from "@privy-io/react-auth"
-import { useSignAndSendTransaction, useWallets } from "@privy-io/react-auth/solana"
 import { Connection, PublicKey } from "@solana/web3.js"
-import bs58 from "bs58"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle, Loader2, Sparkles, XCircle } from "lucide-react"
+import { usePhantomWallet } from "@/hooks/use-phantom-wallet"
 import {
   fetchPayPalRecipient,
   fetchSublyConfig,
@@ -69,13 +67,12 @@ export function SubscriptionInterface() {
   const [processingServiceId, setProcessingServiceId] = useState<number | null>(null)
   const [processingUnsubscribeId, setProcessingUnsubscribeId] = useState<number | null>(null)
 
-  const { ready, authenticated } = usePrivy()
-  const { wallets, ready: walletsReady } = useWallets()
-  const { signAndSendTransaction } = useSignAndSendTransaction()
-
-  const activeWallet = wallets[0]
-  const walletConnected =
-    ready && authenticated && walletsReady && Boolean(activeWallet?.address)
+  const {
+    solana,
+    solanaAddress,
+    isConnected: walletConnected,
+  } = usePhantomWallet()
+  const walletAddress = solanaAddress
 
   const connection = useMemo(
     () => new Connection(DEVNET_ENDPOINT, "confirmed"),
@@ -87,7 +84,7 @@ export function SubscriptionInterface() {
   }, [])
 
   const loadYieldData = useCallback(async () => {
-    if (!walletConnected || !activeWallet?.address) {
+    if (!walletConnected || !walletAddress) {
       setAvailableYield(0)
       setTotalStaked(0)
       updatePayPalState(null)
@@ -96,7 +93,7 @@ export function SubscriptionInterface() {
 
     try {
       setIsYieldLoading(true)
-      const userPk = new PublicKey(activeWallet.address)
+      const userPk = new PublicKey(walletAddress)
 
       const [config, stakeEntries, payPalDetails] = await Promise.all([
         fetchSublyConfig(connection),
@@ -131,7 +128,7 @@ export function SubscriptionInterface() {
     } finally {
       setIsYieldLoading(false)
     }
-  }, [activeWallet, connection, updatePayPalState, walletConnected])
+  }, [connection, updatePayPalState, walletAddress, walletConnected])
 
   const loadServices = useCallback(async () => {
     try {
@@ -162,13 +159,13 @@ export function SubscriptionInterface() {
   }, [connection])
 
   const loadUserSubscriptions = useCallback(async () => {
-    if (!walletConnected || !activeWallet?.address) {
+    if (!walletConnected || !walletAddress) {
       setUserSubscriptions([])
       return
     }
 
     try {
-      const userPk = new PublicKey(activeWallet.address)
+      const userPk = new PublicKey(walletAddress)
       const subscriptions = await fetchUserSubscriptions(connection, userPk)
       setUserSubscriptions(subscriptions)
     } catch (error) {
@@ -180,7 +177,7 @@ export function SubscriptionInterface() {
       )
       setUserSubscriptions([])
     }
-  }, [activeWallet, connection, walletConnected])
+  }, [connection, walletAddress, walletConnected])
 
   useEffect(() => {
     void loadYieldData()
@@ -237,7 +234,7 @@ export function SubscriptionInterface() {
 
   const handleSubscribe = useCallback(
     async (service: SubscriptionServiceCard) => {
-      if (!walletConnected || !activeWallet?.address) {
+      if (!walletConnected || !walletAddress) {
         toast.error("Connect a wallet before subscribing to a service.")
         return
       }
@@ -255,7 +252,7 @@ export function SubscriptionInterface() {
 
       try {
         setProcessingServiceId(service.id)
-        const userPk = new PublicKey(activeWallet.address)
+        const userPk = new PublicKey(walletAddress)
 
         const { transaction, blockhash } = await prepareSubscribeServiceTransaction(
           connection,
@@ -263,14 +260,9 @@ export function SubscriptionInterface() {
           service.id,
         )
 
-        const serialized = transaction.serialize({ requireAllSignatures: false })
-        const { signature } = await signAndSendTransaction({
-          transaction: serialized,
-          wallet: activeWallet,
-          chain: "solana:devnet",
-        })
-
-        const signatureString = bs58.encode(signature)
+        const { signature: signatureString } = await solana.signAndSendTransaction(
+          transaction,
+        )
 
         await connection.confirmTransaction(
           {
@@ -304,20 +296,12 @@ export function SubscriptionInterface() {
         setProcessingServiceId(null)
       }
     },
-    [
-      activeWallet,
-      connection,
-      hasPayPal,
-      loadUserSubscriptions,
-      loadYieldData,
-      signAndSendTransaction,
-      walletConnected,
-    ],
+    [connection, hasPayPal, loadUserSubscriptions, loadYieldData, solana, walletAddress, walletConnected],
   )
 
   const handleUnsubscribe = useCallback(
     async (subscription: ResolvedSubscriptionCard) => {
-      if (!walletConnected || !activeWallet?.address) {
+      if (!walletConnected || !walletAddress) {
         toast.error("Connect a wallet before unsubscribing.")
         return
       }
@@ -329,7 +313,7 @@ export function SubscriptionInterface() {
 
       try {
         setProcessingUnsubscribeId(subscription.subscriptionId)
-        const userPk = new PublicKey(activeWallet.address)
+        const userPk = new PublicKey(walletAddress)
 
         const { transaction, blockhash } = await prepareUnsubscribeServiceTransaction(
           connection,
@@ -337,14 +321,9 @@ export function SubscriptionInterface() {
           subscription.subscriptionId,
         )
 
-        const serialized = transaction.serialize({ requireAllSignatures: false })
-        const { signature } = await signAndSendTransaction({
-          transaction: serialized,
-          wallet: activeWallet,
-          chain: "solana:devnet",
-        })
-
-        const signatureString = bs58.encode(signature)
+        const { signature: signatureString } = await solana.signAndSendTransaction(
+          transaction,
+        )
 
         await connection.confirmTransaction(
           {
@@ -378,14 +357,7 @@ export function SubscriptionInterface() {
         setProcessingUnsubscribeId(null)
       }
     },
-    [
-      activeWallet,
-      connection,
-      loadUserSubscriptions,
-      loadYieldData,
-      signAndSendTransaction,
-      walletConnected,
-    ],
+    [connection, loadUserSubscriptions, loadYieldData, solana, walletAddress, walletConnected],
   )
 
   return (

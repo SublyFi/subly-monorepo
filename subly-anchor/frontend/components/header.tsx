@@ -2,11 +2,9 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-import { usePrivy } from "@privy-io/react-auth";
-import { useWallets } from "@privy-io/react-auth/solana";
-
 import { Button } from "@/components/ui/button";
 import { useSolanaName } from "@/hooks/use-solana-name";
+import { usePhantomWallet } from "@/hooks/use-phantom-wallet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ExternalLink, Loader2, LogOut, Menu, Wallet, X } from "lucide-react";
 import Image from "next/image";
+import { toast } from "sonner";
 
 interface HeaderProps {
   activeTab: string;
@@ -25,14 +24,18 @@ interface HeaderProps {
 export function Header({ activeTab, onTabChange }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isWalletMenuOpen, setIsWalletMenuOpen] = useState(false);
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
-  const { ready, authenticated, connectWallet, login, logout } = usePrivy();
-  const { wallets, ready: walletsReady } = useWallets();
+  const {
+    connect,
+    disconnect,
+    isConnected: walletConnected,
+    isConnecting,
+    isDisconnecting,
+    solanaAddress,
+  } = usePhantomWallet();
 
-  const activeWallet = wallets[0];
-  const walletAddress = activeWallet?.address;
-  const accountLabel = activeWallet?.address;
+  const walletAddress = solanaAddress;
+  const accountLabel = walletAddress;
   const { name: solanaName, isLoading: isNameLoading } =
     useSolanaName(walletAddress);
   const walletExplorerUrl = walletAddress
@@ -50,32 +53,27 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
     return `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`;
   }, [accountLabel, solanaName, walletAddress]);
 
-  const walletConnected =
-    ready && authenticated && walletsReady && wallets.length > 0;
-
-  const handleConnectWallet = useCallback(() => {
-    if (!ready || isDisconnecting) {
-      return;
-    }
-
-    if (!authenticated) {
-      login();
-      return;
-    }
-
-    if (!walletConnected) {
-      connectWallet({ walletChainType: "solana-only" });
-    } else {
+  const handleConnectWallet = useCallback(async () => {
+    if (walletConnected) {
       setIsWalletMenuOpen(true);
+      return;
     }
-  }, [
-    authenticated,
-    connectWallet,
-    isDisconnecting,
-    login,
-    ready,
-    walletConnected,
-  ]);
+
+    if (isConnecting || isDisconnecting) {
+      return;
+    }
+
+    try {
+      await connect();
+    } catch (error) {
+      console.error("Failed to connect wallet", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to connect wallet. Please try again."
+      );
+    }
+  }, [connect, isConnecting, isDisconnecting, walletConnected]);
 
   const handleDisconnectWallet = useCallback(async () => {
     if (!walletConnected || !walletAddress) {
@@ -83,16 +81,17 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
     }
 
     try {
-      setIsDisconnecting(true);
-      // Use logout to disconnect the user completely
-      await logout();
+      await disconnect();
       setIsWalletMenuOpen(false);
     } catch (error) {
       console.error("Failed to disconnect wallet", error);
-    } finally {
-      setIsDisconnecting(false);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to disconnect wallet. Please try again."
+      );
     }
-  }, [logout, walletAddress, walletConnected]);
+  }, [disconnect, walletAddress, walletConnected]);
 
   const handleViewOnExplorer = useCallback(() => {
     if (!walletExplorerUrl) {
@@ -195,17 +194,19 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
                 variant="default"
                 className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 sm:py-2.5 font-medium text-xs sm:text-sm"
                 size="sm"
-                disabled={!ready || isDisconnecting}
+                disabled={isConnecting || isDisconnecting}
               >
-                {!ready || isDisconnecting ? (
+                {isConnecting || isDisconnecting ? (
                   <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                 ) : (
                   <Wallet className="w-3 h-3 sm:w-4 sm:h-4" />
                 )}
                 <span className="hidden sm:inline">
-                  {ready ? "Connect" : "Initializing"}
+                  {isConnecting ? "Connecting" : "Connect"}
                 </span>
-                <span className="sm:hidden">{ready ? "Connect" : "Init"}</span>
+                <span className="sm:hidden">
+                  {isConnecting ? "..." : "Connect"}
+                </span>
               </Button>
             )}
 
