@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckCircle, Edit, Loader2, Mail, XCircle } from "lucide-react"
-import { usePhantomWallet } from "@/hooks/use-phantom-wallet"
+import { AddressType } from "@phantom/browser-sdk"
+import { useAccounts, useSolana } from "@phantom/react-sdk"
 
 import {
   fetchPayPalRecipient,
@@ -80,12 +81,15 @@ export function ProfileInterface() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
-  const {
-    solana,
-    solanaAddress,
-    isConnected: walletConnected,
-  } = usePhantomWallet()
-  const walletAddress = solanaAddress
+  const { solana } = useSolana()
+  const addresses = useAccounts()
+  const walletAddress = useMemo(() => {
+    return (
+      addresses?.find((addr) => addr.addressType === AddressType.solana)?.address ??
+      null
+    )
+  }, [addresses])
+  const walletConnected = Boolean(walletAddress)
 
   const connection = useMemo(
     () => new Connection(DEVNET_ENDPOINT, "confirmed"),

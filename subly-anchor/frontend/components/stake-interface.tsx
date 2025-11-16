@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { usePhantomWallet } from "@/hooks/use-phantom-wallet"
+import { AddressType } from "@phantom/browser-sdk"
+import { useAccounts, useSolana } from "@phantom/react-sdk"
 import {
   fetchSublyConfig,
   fetchUserStakeEntries,
@@ -37,12 +38,15 @@ export function StakeInterface() {
   const [usdcBalance, setUsdcBalance] = useState<bigint>(0n)
   const [isBalanceLoading, setIsBalanceLoading] = useState(false)
 
-  const {
-    solana,
-    solanaAddress,
-    isConnected: walletConnected,
-  } = usePhantomWallet()
-  const walletAddress = solanaAddress
+  const { solana } = useSolana()
+  const addresses = useAccounts()
+  const walletAddress = useMemo(() => {
+    return (
+      addresses?.find((addr) => addr.addressType === AddressType.solana)?.address ??
+      null
+    )
+  }, [addresses])
+  const walletConnected = Boolean(walletAddress)
 
   const connection = useMemo(
     () => new Connection(DEVNET_ENDPOINT, "confirmed"),

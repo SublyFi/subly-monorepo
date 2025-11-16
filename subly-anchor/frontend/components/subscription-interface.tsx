@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle, Loader2, Sparkles, XCircle } from "lucide-react"
-import { usePhantomWallet } from "@/hooks/use-phantom-wallet"
+import { AddressType } from "@phantom/browser-sdk"
+import { useAccounts, useSolana } from "@phantom/react-sdk"
 import {
   fetchPayPalRecipient,
   fetchSublyConfig,
@@ -67,12 +68,15 @@ export function SubscriptionInterface() {
   const [processingServiceId, setProcessingServiceId] = useState<number | null>(null)
   const [processingUnsubscribeId, setProcessingUnsubscribeId] = useState<number | null>(null)
 
-  const {
-    solana,
-    solanaAddress,
-    isConnected: walletConnected,
-  } = usePhantomWallet()
-  const walletAddress = solanaAddress
+  const { solana } = useSolana()
+  const addresses = useAccounts()
+  const walletAddress = useMemo(() => {
+    return (
+      addresses?.find((addr) => addr.addressType === AddressType.solana)?.address ??
+      null
+    )
+  }, [addresses])
+  const walletConnected = Boolean(walletAddress)
 
   const connection = useMemo(
     () => new Connection(DEVNET_ENDPOINT, "confirmed"),

@@ -2,9 +2,10 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { AddressType } from "@phantom/browser-sdk";
+import { useAccounts, useConnect, useDisconnect } from "@phantom/react-sdk";
 import { Button } from "@/components/ui/button";
 import { useSolanaName } from "@/hooks/use-solana-name";
-import { usePhantomWallet } from "@/hooks/use-phantom-wallet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,14 +26,16 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isWalletMenuOpen, setIsWalletMenuOpen] = useState(false);
 
-  const {
-    connect,
-    disconnect,
-    isConnected: walletConnected,
-    isConnecting,
-    isDisconnecting,
-    solanaAddress,
-  } = usePhantomWallet();
+  const { connect, isConnecting } = useConnect();
+  const { disconnect, isDisconnecting } = useDisconnect();
+  const addresses = useAccounts();
+  const solanaAddress = useMemo(() => {
+    return (
+      addresses?.find((addr) => addr.addressType === AddressType.solana)
+        ?.address ?? null
+    );
+  }, [addresses]);
+  const walletConnected = Boolean(solanaAddress);
 
   const walletAddress = solanaAddress;
   const accountLabel = walletAddress;
@@ -64,7 +67,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
     }
 
     try {
-      await connect();
+      await connect({ provider: "injected" });
     } catch (error) {
       console.error("Failed to connect wallet", error);
       toast.error(
