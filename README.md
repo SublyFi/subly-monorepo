@@ -18,7 +18,7 @@ Subscribe Now, Pay Never. This is the privacy-first PayFi protocol for subscript
 
 - https://demo.sublyfi.com/
 
-## Integrate with Phantom Wallet
+## Integration with Phantom Wallet Demo
 - https://github.com/user-attachments/assets/38118338-c23e-4bf0-a0fc-01aa9d193970
 
 ## Key Features
