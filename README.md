@@ -18,8 +18,10 @@ Subscribe Now, Pay Never. This is the privacy-first PayFi protocol for subscript
 
 - https://demo.sublyfi.com/
 
-## Key Features
+## Integrate with Phantom Wallet
+- https://github.com/user-attachments/assets/38118338-c23e-4bf0-a0fc-01aa9d193970
 
+## Key Features
 ### Solana program
 
 - Deposit USDC program
