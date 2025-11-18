@@ -12,35 +12,18 @@ interface ProvidersProps {
 }
 
 export function Providers({ children }: ProvidersProps) {
-  const phantomDebugEnabled =
-    process.env.NEXT_PUBLIC_PHANTOM_DEBUG === "true";
-
-  const phantomConfig = useMemo<PhantomSDKConfig>(() => {
-    return {
-      providerType: "injected",
-      addressTypes: [AddressType.solana],
-    };
-  }, []);
-
-  const phantomDebugConfig = useMemo<PhantomDebugConfig | undefined>(() => {
-    if (!phantomDebugEnabled) {
-      return undefined;
-    }
-
-    return {
-      enabled: true,
-      level: DebugLevel.DEBUG,
-      callback: (entry) => {
-        console.debug(
-          `[Phantom][${entry.category}] ${entry.message}`,
-          entry.data ?? entry
-        );
-      },
-    };
-  }, [phantomDebugEnabled]);
-
   return (
-    <PhantomProvider config={phantomConfig} debugConfig={phantomDebugConfig}>
+    <PhantomProvider
+      config={{
+        providerType: "embedded", // or "injected" for browser extension
+        addressTypes: [AddressType.solana],
+        appId: process.env.NEXT_PUBLIC_PHANTOM_APP_ID || "",
+        authOptions: {
+          authUrl: "https://connect.phantom.app/login",
+          redirectUrl: process.env.NEXT_PUBLIC_PHANTOM_REDIRECT_URL || "", // Must be an existing page in your app and whitelisted in Phantom Portal
+        },
+      }}
+    >
       {children}
     </PhantomProvider>
   );

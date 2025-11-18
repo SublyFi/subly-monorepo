@@ -67,7 +67,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
     }
 
     try {
-      await connect({ provider: "injected" });
+      await connect({ provider: "google" });
     } catch (error) {
       console.error("Failed to connect wallet", error);
       toast.error(
