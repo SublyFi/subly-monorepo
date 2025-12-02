@@ -122,4 +122,51 @@ mod circuits {
         metadata.status = 1; // PendingCancellation
         metadata_ctxt.owner.from_arcis(metadata)
     }
+
+    /// Moves a subscription's commitment from the active total to the pending total
+    /// while keeping all subscription details encrypted.
+    ///
+    /// # Arguments
+    /// * `active_total_ctxt`   - Encrypted total of active subscriptions (user's key)
+    /// * `pending_total_ctxt`  - Encrypted total of pending cancellations (user's key)
+    /// * `subscription_ctxt`   - Encrypted subscription information (contains monthly_price)
+    ///
+    /// # Returns
+    /// * Updated encrypted active total (user's key)
+    /// * Updated encrypted pending total (user's key)
+    /// * Boolean revealing whether the transition succeeded without overflow/underflow
+    #[instruction]
+    pub fn unsubscribe_service(
+        active_total_ctxt: Enc<Shared, u64>,
+        pending_total_ctxt: Enc<Shared, u64>,
+        subscription_ctxt: Enc<Shared, SubscriptionInfo>,
+    ) -> (Enc<Shared, u64>, Enc<Shared, u64>, bool) {
+        let active_total = active_total_ctxt.to_arcis();
+        let pending_total = pending_total_ctxt.to_arcis();
+        let subscription = subscription_ctxt.to_arcis();
+
+        let price = subscription.monthly_price;
+
+        let can_deactivate = active_total >= price;
+        let pending_wont_overflow = pending_total <= u64::MAX - price;
+        let transition_valid = can_deactivate && pending_wont_overflow;
+
+        let updated_active = if transition_valid {
+            active_total - price
+        } else {
+            active_total
+        };
+
+        let updated_pending = if transition_valid {
+            pending_total + price
+        } else {
+            pending_total
+        };
+
+        (
+            active_total_ctxt.owner.from_arcis(updated_active),
+            pending_total_ctxt.owner.from_arcis(updated_pending),
+            transition_valid.reveal(),
+        )
+    }
 }
