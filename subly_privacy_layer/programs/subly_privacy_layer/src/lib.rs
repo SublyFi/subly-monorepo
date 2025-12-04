@@ -6,6 +6,7 @@ use arcium_client::idl::arcium::types::{CircuitSource, OffChainCircuitSource};
 use subly::instructions::cancel_subscription_metadata::CancelSubscriptionMetadataOutput;
 use subly::instructions::create_subscription_metadata::CreateSubscriptionMetadataOutput;
 use subly::instructions::subscribe_service::SubscribeServiceOutput;
+use subly::instructions::unsubscribe_service::UnsubscribeServiceOutput;
 use subly::instructions::update_subscription_metadata::UpdateSubscriptionMetadataOutput;
 
 pub use subly::constants as subly_constants;
@@ -38,7 +39,8 @@ pub use subly::instructions::subscribe_service::{
 pub use subly::instructions::sync_yield::{SyncYield, YieldSnapshot};
 pub use subly::instructions::unstake::Unstake;
 pub use subly::instructions::unsubscribe_service::{
-    SubscriptionCancellationRequested, UnsubscribeService, UnsubscribeServiceArgs,
+    InitUnsubscribeServiceCompDef, SubscriptionCancellationRequested, UnsubscribeService,
+    UnsubscribeServiceArgs, UnsubscribeServiceCallback,
 };
 pub use subly::instructions::update_subscription_metadata::{
     InitUpdateSubscriptionMetadataCompDef, UpdateSubscriptionMetadata,
@@ -109,6 +111,14 @@ pub mod __client_accounts_unsubscribe_service {
     pub use crate::subly::instructions::unsubscribe_service::__client_accounts_unsubscribe_service::*;
 }
 
+pub mod __client_accounts_init_unsubscribe_service_comp_def {
+    pub use crate::subly::instructions::unsubscribe_service::__client_accounts_init_unsubscribe_service_comp_def::*;
+}
+
+pub mod __client_accounts_unsubscribe_service_callback {
+    pub use crate::subly::instructions::unsubscribe_service::__client_accounts_unsubscribe_service_callback::*;
+}
+
 pub mod __client_accounts_init_update_subscription_metadata_comp_def {
     pub use crate::subly::instructions::update_subscription_metadata::__client_accounts_init_update_subscription_metadata_comp_def::*;
 }
@@ -140,6 +150,7 @@ const COMP_DEF_OFFSET_UPDATE_SUBSCRIPTION_METADATA: u32 =
     comp_def_offset("update_subscription_metadata");
 const COMP_DEF_OFFSET_CANCEL_SUBSCRIPTION_METADATA: u32 =
     comp_def_offset("cancel_subscription_metadata");
+const COMP_DEF_OFFSET_UNSUBSCRIBE_SERVICE: u32 = comp_def_offset("unsubscribe_service");
 
 declare_id!("CKGaJ8QUBFuMSkB5wdk1R57Uj2Ypiy3FTfSHNNSb2yEV");
 
@@ -200,6 +211,22 @@ pub mod subly_privacy_layer {
         output: ComputationOutputs<SubscribeServiceOutput>,
     ) -> Result<()> {
         subly::instructions::subscribe_service::handle_callback(ctx, output)
+    }
+
+    pub fn init_unsubscribe_service_comp_def(
+        ctx: Context<InitUnsubscribeServiceCompDef>,
+    ) -> Result<()> {
+        init_comp_def(
+            ctx.accounts,
+            true,
+            0,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/unsubscribe_service_testnet.arcis".to_string(),
+                hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
+            })),
+            None,
+        )?;
+        Ok(())
     }
 
     pub fn init_create_subscription_metadata_comp_def(
@@ -324,8 +351,17 @@ pub mod subly_privacy_layer {
 
     pub fn unsubscribe_service(
         ctx: Context<UnsubscribeService>,
+        computation_offset: u64,
         args: UnsubscribeServiceArgs,
     ) -> Result<()> {
-        subly::instructions::unsubscribe_service::handler(ctx, args)
+        subly::instructions::unsubscribe_service::handler(ctx, computation_offset, args)
+    }
+
+    #[arcium_callback(encrypted_ix = "unsubscribe_service")]
+    pub fn unsubscribe_service_callback(
+        ctx: Context<UnsubscribeServiceCallback>,
+        output: ComputationOutputs<UnsubscribeServiceOutput>,
+    ) -> Result<()> {
+        subly::instructions::unsubscribe_service::handle_callback(ctx, output)
     }
 }

@@ -1468,9 +1468,78 @@
               }
             ]
           }
+        },
+        {
+          "name": "sign_pda_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  83,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  65,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mxe_account"
+        },
+        {
+          "name": "mempool_account",
+          "writable": true
+        },
+        {
+          "name": "executing_pool",
+          "writable": true
+        },
+        {
+          "name": "computation_account",
+          "writable": true
+        },
+        {
+          "name": "comp_def_account"
+        },
+        {
+          "name": "cluster_account",
+          "writable": true
+        },
+        {
+          "name": "pool_account",
+          "writable": true,
+          "address": "7MGSS4iKNM4sVib7bDZDJhVqB6EcchPwVnTKenCY1jt3"
+        },
+        {
+          "name": "clock_account",
+          "address": "FHriyvoZotYiFnbUzKFjzRSb2NiaC8RPWY7jtKuKhg65"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "arcium_program",
+          "address": "BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6"
         }
       ],
       "args": [
+        {
+          "name": "computation_offset",
+          "type": "u64"
+        },
         {
           "name": "args",
           "type": {
@@ -1656,6 +1725,93 @@
                   "type": {
                     "defined": {
                       "name": "UpdateSubscriptionMetadataOutput"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "init_unsubscribe_service_comp_def",
+      "discriminator": [
+        39,
+        204,
+        177,
+        51,
+        83,
+        31,
+        110,
+        27
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mxe_account",
+          "writable": true
+        },
+        {
+          "name": "comp_def_account",
+          "writable": true
+        },
+        {
+          "name": "arcium_program",
+          "address": "BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "unsubscribe_service_callback",
+      "discriminator": [
+        140,
+        161,
+        204,
+        117,
+        198,
+        241,
+        163,
+        117
+      ],
+      "accounts": [
+        {
+          "name": "arcium_program",
+          "address": "BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6"
+        },
+        {
+          "name": "comp_def_account"
+        },
+        {
+          "name": "instructions_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "user_subscriptions",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "output",
+          "type": {
+            "defined": {
+              "name": "ComputationOutputs",
+              "generics": [
+                {
+                  "kind": "type",
+                  "type": {
+                    "defined": {
+                      "name": "UnsubscribeServiceOutput"
                     }
                   }
                 }
@@ -3391,6 +3547,42 @@
           {
             "name": "subscription_id",
             "type": "u64"
+          },
+          {
+            "name": "encryption_pubkey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "nonce",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "active_commitment_ciphertext",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pending_commitment_ciphertext",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
@@ -3530,8 +3722,8 @@
         "Represents a user's subscription to a service.",
         "",
         "Privacy-first design (Phase 4 - Full Privacy):",
-        "- `encrypted_data`: Contains sensitive subscription details (service_id, price) - ENCRYPTED ✅",
-        "- `encrypted_metadata`: Contains timestamps and status - ENCRYPTED ✅",
+        "- `encrypted_data`: Contains sensitive subscription details (service_id, price) - ENCRYPTED \u2705",
+        "- `encrypted_metadata`: Contains timestamps and status - ENCRYPTED \u2705",
         "",
         "All sensitive data is encrypted. No plaintext fields exposed on-chain.",
         "Metadata is encrypted with MXE-only encryption for maximum privacy."
@@ -3697,6 +3889,66 @@
           {
             "name": "last_updated_ts",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UnsubscribeServiceOutputStruct0",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field_0",
+            "type": {
+              "defined": {
+                "name": "SharedEncryptedStruct",
+                "generics": [
+                  {
+                    "kind": "const",
+                    "value": "1"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "field_1",
+            "type": {
+              "defined": {
+                "name": "SharedEncryptedStruct",
+                "generics": [
+                  {
+                    "kind": "const",
+                    "value": "1"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "field_2",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UnsubscribeServiceOutput",
+      "docs": [
+        "The output of the callback instruction. Provided as a struct with ordered fields",
+        "as anchor does not support tuples and tuple structs yet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field_0",
+            "type": {
+              "defined": {
+                "name": "UnsubscribeServiceOutputStruct0"
+              }
+            }
           }
         ]
       }

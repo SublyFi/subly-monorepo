@@ -9,7 +9,7 @@ import {
   x25519,
   getMXEPublicKey as getArciumMXEPublicKey,
 } from "@arcium-hq/client";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { AnchorProvider } from "@coral-xyz/anchor";
 
 // Re-export RescueCipher for use in other modules
@@ -171,6 +171,14 @@ export function generateComputationOffset(): bigint {
 }
 
 /**
+ * Derive computation definition offset from instruction name (matches Rust comp_def_offset)
+ */
+export function deriveCompDefOffset(instructionName: string): number {
+  const hash = createHash("sha256").update(instructionName).digest();
+  return hash.readUInt32LE(0);
+}
+
+/**
  * Arcium program ID (mainnet/devnet)
  */
 export const ARCIUM_PROGRAM_ID = new PublicKey(
@@ -231,7 +239,8 @@ export function getCompDefAccountAddress(
  */
 export function getArciumAccounts(
   programId: PublicKey,
-  computationOffset: bigint
+  computationOffset: bigint,
+  compDefOffset = deriveCompDefOffset("subscribe_service")
 ) {
   const SIGNER_ACCOUNT_SEED = Buffer.from("SignerAccount");
 
@@ -263,9 +272,6 @@ export function getArciumAccounts(
     programId
   );
 
-  // Get computation definition offset for subscribe_service
-  // This should match the value from build/subscribe_service.arcis
-  const compDefOffset = 2598735807; // From test output
   const compDefAccount = getCompDefAccountAddress(programId, compDefOffset);
 
   const clusterAccount = getClusterAccountAddress(0); // Cluster ID 0

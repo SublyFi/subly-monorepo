@@ -25,6 +25,7 @@ import {
   createSharedEncryptionBundle,
   getMXEPublicKey,
   getArciumAccounts,
+  deriveCompDefOffset,
   generateComputationOffset,
   decryptConfidentialBundle,
   ARCIUM_FEE_POOL_ACCOUNT,
@@ -582,7 +583,11 @@ export async function prepareSubscribeServiceTransaction(
   const computationOffset = generateComputationOffset();
 
   // Get Arcium accounts
-  const arciumAccounts = getArciumAccounts(PROGRAM_ID, computationOffset);
+  const arciumAccounts = getArciumAccounts(
+    PROGRAM_ID,
+    computationOffset,
+    deriveCompDefOffset("subscribe_service")
+  );
 
   // Prepare instruction arguments
   const instructionCoder = new BorshInstructionCoder(SUBLY_IDL);
@@ -660,10 +665,15 @@ export async function prepareSubscribeServiceTransaction(
 export async function prepareUnsubscribeServiceTransaction(
   connection: Connection,
   user: PublicKey,
-  subscriptionId: number
+  subscriptionId: number,
+  options?: {
+    cipher?: RescueCipher;
+    pendingTotal?: bigint;
+  }
 ): Promise<{
   transaction: Transaction;
   blockhash: BlockhashWithExpiryBlockHeight;
+  computationOffset: bigint;
 }> {
   if (subscriptionId < 0) {
     throw new Error("Invalid subscription identifier");
@@ -681,10 +691,103 @@ export async function prepareUnsubscribeServiceTransaction(
     throw new Error("No subscription record found for this wallet");
   }
 
+  const coder = getCoder();
+  const decoded = coder.decode("UserSubscriptions", userSubscriptionsInfo.data) as any;
+  const subscriptions = (decoded.subscriptions ?? []) as any[];
+  const subscription = subscriptions.find(
+    (sub) => Number(sub.id ?? 0) === subscriptionId
+  );
+
+  if (!subscription) {
+    throw new Error(`Subscription ${subscriptionId} not found`);
+  }
+
+  const encryptionKey = Uint8Array.from(subscription.encrypted_data.encryption_key ?? []);
+  const nonce = Uint8Array.from(subscription.encrypted_data.nonce ?? []);
+  const subscriptionCipherCount = Number(
+    subscription.encrypted_data.ciphertext_count ?? 0
+  );
+
+  if (encryptionKey.length !== 32 || nonce.length !== 16) {
+    throw new Error("Invalid encryption context on subscription record");
+  }
+  if (subscriptionCipherCount < 2) {
+    throw new Error("Subscription payload is missing ciphertexts");
+  }
+
+  const activeCommitment = decoded.encrypted_active_commitment as any;
+  const activeCipherCount = Number(activeCommitment.ciphertext_count ?? 0);
+  if (activeCipherCount !== 1) {
+    throw new Error("Active commitment is not initialized");
+  }
+  if (
+    !activeCommitment.encryption_key ||
+    !activeCommitment.nonce ||
+    activeCommitment.encryption_key.some(
+      (value: number, idx: number) => value !== encryptionKey[idx]
+    ) ||
+    activeCommitment.nonce.some((value: number, idx: number) => value !== nonce[idx])
+  ) {
+    throw new Error("Active commitment does not match subscription encryption context");
+  }
+  const activeCiphertext = activeCommitment.ciphertexts?.[0] as number[] | undefined;
+  if (!activeCiphertext) {
+    throw new Error("Active commitment ciphertext missing");
+  }
+
+  const pendingCommitment = decoded.encrypted_pending_commitment as any;
+  const pendingCipherCount = Number(pendingCommitment.ciphertext_count ?? 0);
+  let pendingCiphertext: number[] | undefined = pendingCommitment.ciphertexts?.[0];
+
+  if (pendingCipherCount > 0) {
+    if (
+      !pendingCommitment.encryption_key ||
+      !pendingCommitment.nonce ||
+      pendingCommitment.encryption_key.some(
+        (value: number, idx: number) => value !== encryptionKey[idx]
+      ) ||
+      pendingCommitment.nonce.some(
+        (value: number, idx: number) => value !== nonce[idx]
+      )
+    ) {
+      throw new Error("Pending commitment uses a different encryption context");
+    }
+    if (pendingCipherCount !== 1 || !pendingCiphertext) {
+      throw new Error("Pending commitment layout is invalid");
+    }
+  } else {
+    const cipher = options?.cipher;
+    if (!cipher) {
+      throw new Error(
+        "Pending commitment missing; provide cipher to encrypt the current pending total (default 0)"
+      );
+    }
+    const pendingTotal = options?.pendingTotal ?? 0n;
+    const encryptedPending = cipher.encrypt([pendingTotal], nonce);
+    pendingCiphertext = Array.from(encryptedPending[0]);
+  }
+
+  if (!pendingCiphertext) {
+    throw new Error("Pending commitment ciphertext unavailable");
+  }
+
+  const computationOffset = generateComputationOffset();
+
+  const arciumAccounts = getArciumAccounts(
+    PROGRAM_ID,
+    computationOffset,
+    deriveCompDefOffset("unsubscribe_service")
+  );
+
   const instructionCoder = new BorshInstructionCoder(SUBLY_IDL);
   const encoded = instructionCoder.encode("unsubscribe_service", {
+    computation_offset: new BN(computationOffset.toString()),
     args: {
       subscription_id: new BN(subscriptionId),
+      encryption_pubkey: Array.from(encryptionKey),
+      nonce: Array.from(nonce),
+      active_commitment_ciphertext: Array.from(activeCiphertext),
+      pending_commitment_ciphertext: Array.from(pendingCiphertext),
     },
   });
 
@@ -693,6 +796,45 @@ export async function prepareUnsubscribeServiceTransaction(
     keys: [
       { pubkey: user, isSigner: true, isWritable: true },
       { pubkey: userSubscriptionsPda, isSigner: false, isWritable: true },
+      {
+        pubkey: arciumAccounts.signPdaAccount,
+        isSigner: false,
+        isWritable: true,
+      },
+      { pubkey: arciumAccounts.mxeAccount, isSigner: false, isWritable: false },
+      {
+        pubkey: arciumAccounts.mempoolAccount,
+        isSigner: false,
+        isWritable: true,
+      },
+      {
+        pubkey: arciumAccounts.executingPool,
+        isSigner: false,
+        isWritable: true,
+      },
+      {
+        pubkey: arciumAccounts.computationAccount,
+        isSigner: false,
+        isWritable: true,
+      },
+      {
+        pubkey: arciumAccounts.compDefAccount,
+        isSigner: false,
+        isWritable: false,
+      },
+      {
+        pubkey: arciumAccounts.clusterAccount,
+        isSigner: false,
+        isWritable: true,
+      },
+      { pubkey: ARCIUM_FEE_POOL_ACCOUNT, isSigner: false, isWritable: true },
+      { pubkey: ARCIUM_CLOCK_ACCOUNT, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      {
+        pubkey: arciumAccounts.arciumProgram,
+        isSigner: false,
+        isWritable: false,
+      },
     ],
     data: encoded,
   });
@@ -703,7 +845,7 @@ export async function prepareUnsubscribeServiceTransaction(
   const blockhash = await connection.getLatestBlockhash();
   transaction.recentBlockhash = blockhash.blockhash;
 
-  return { transaction, blockhash };
+  return { transaction, blockhash, computationOffset };
 }
 
 export function parseUsdcAmount(input: string): bigint {
