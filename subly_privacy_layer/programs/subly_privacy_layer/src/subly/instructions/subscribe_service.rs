@@ -75,19 +75,23 @@ pub struct SubscribeService<'info> {
     pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(
         mut,
-        address = derive_mempool_pda!()
+        address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     /// CHECK: checked by arcium macros
     pub mempool_account: UncheckedAccount<'info>,
     #[account(
         mut,
-        address = derive_execpool_pda!()
+        address = derive_execpool_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     /// CHECK: checked by arcium macros
     pub executing_pool: UncheckedAccount<'info>,
     #[account(
         mut,
-        address = derive_comp_pda!(computation_offset)
+        address = derive_comp_pda!(
+            computation_offset,
+            mxe_account,
+            ErrorCode::ClusterNotSet
+        )
     )]
     /// CHECK: checked by arcium macros
     pub computation_account: UncheckedAccount<'info>,
@@ -95,7 +99,7 @@ pub struct SubscribeService<'info> {
     pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(
         mut,
-        address = derive_cluster_pda!(mxe_account)
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(
@@ -115,6 +119,16 @@ pub struct SubscribeServiceCallback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(crate::COMP_DEF_OFFSET_SUBSCRIBE_SERVICE))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(
+        mut,
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
+    )]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut)]
+    /// CHECK: computation account validated through BLS verification
+    pub computation_account: UncheckedAccount<'info>,
     #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
     /// CHECK: instructions sysvar
     pub instructions_sysvar: AccountInfo<'info>,
@@ -322,16 +336,16 @@ pub fn handler(
     // The circuit expects: (total: Enc<Shared, u64>, subscription: Enc<Shared, SubscriptionInfo>, budget: u64)
     // SubscriptionInfo is a struct with 2 u64 fields
     // When passing a struct, we need to pass individual encrypted fields sequentially
-    let computation_args = vec![
-        Argument::ArcisPubkey(args.encryption_pubkey),
-        Argument::PlaintextU128(nonce),
-        Argument::EncryptedU64(args.total_ciphertext),
-        Argument::ArcisPubkey(args.encryption_pubkey),
-        Argument::PlaintextU128(nonce),
-        Argument::EncryptedU64(args.subscription_service_id_ciphertext),
-        Argument::EncryptedU64(args.subscription_monthly_price_ciphertext),
-        Argument::PlaintextU64(monthly_budget),
-    ];
+    let computation_args = ArgBuilder::new()
+        .x25519_pubkey(args.encryption_pubkey)
+        .plaintext_u128(nonce)
+        .encrypted_u64(args.total_ciphertext)
+        .x25519_pubkey(args.encryption_pubkey)
+        .plaintext_u128(nonce)
+        .encrypted_u64(args.subscription_service_id_ciphertext)
+        .encrypted_u64(args.subscription_monthly_price_ciphertext)
+        .plaintext_u64(monthly_budget)
+        .build();
     msg!(
         "SubscribeService: arguments prepared nonce={} monthly_budget={}",
         nonce,
@@ -349,10 +363,16 @@ pub fn handler(
         computation_offset,
         computation_args,
         None,
-        vec![SubscribeServiceCallback::callback_ix(&[CallbackAccount {
-            pubkey: ctx.accounts.user_subscriptions.key(),
-            is_writable: true,
-        }])],
+        vec![SubscribeServiceCallback::callback_ix(
+            computation_offset,
+            &ctx.accounts.mxe_account,
+            &[CallbackAccount {
+                pubkey: ctx.accounts.user_subscriptions.key(),
+                is_writable: true,
+            }],
+        )?],
+        1,
+        0,
     )?;
     msg!("SubscribeService: queue_computation ok");
 
@@ -361,12 +381,15 @@ pub fn handler(
 
 pub fn handle_callback(
     ctx: Context<SubscribeServiceCallback>,
-    output: ComputationOutputs<SubscribeServiceOutput>,
+    output: SignedComputationOutputs<SubscribeServiceOutput>,
 ) -> Result<()> {
     msg!("SubscribeService callback: START");
 
-    let (total_enc, subscription_enc, within_budget) = match output {
-        ComputationOutputs::Success(SubscribeServiceOutput {
+    let (total_enc, subscription_enc, within_budget) = match output.verify_output(
+        &ctx.accounts.cluster_account,
+        &ctx.accounts.computation_account,
+    ) {
+        Ok(SubscribeServiceOutput {
             field_0:
                 SubscribeServiceOutputStruct0 {
                     field_0,
@@ -374,7 +397,10 @@ pub fn handle_callback(
                     field_2,
                 },
         }) => (field_0, field_1, field_2),
-        _ => return Err(ErrorCode::AbortedComputation.into()),
+        Err(err) => {
+            msg!("SubscribeService callback: verification failed {}", err);
+            return Err(ErrorCode::AbortedComputation.into());
+        }
     };
 
     msg!(

@@ -48,19 +48,23 @@ pub struct CreateSubscriptionMetadata<'info> {
     pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(
         mut,
-        address = derive_mempool_pda!()
+        address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     /// CHECK: checked by arcium macros
     pub mempool_account: UncheckedAccount<'info>,
     #[account(
         mut,
-        address = derive_execpool_pda!()
+        address = derive_execpool_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     /// CHECK: checked by arcium macros
     pub executing_pool: UncheckedAccount<'info>,
     #[account(
         mut,
-        address = derive_comp_pda!(computation_offset)
+        address = derive_comp_pda!(
+            computation_offset,
+            mxe_account,
+            ErrorCode::ClusterNotSet
+        )
     )]
     /// CHECK: checked by arcium macros
     pub computation_account: UncheckedAccount<'info>,
@@ -68,7 +72,7 @@ pub struct CreateSubscriptionMetadata<'info> {
     pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(
         mut,
-        address = derive_cluster_pda!(mxe_account)
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(
@@ -88,6 +92,16 @@ pub struct CreateSubscriptionMetadataCallback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_CREATE_SUBSCRIPTION_METADATA))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(
+        mut,
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
+    )]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut)]
+    /// CHECK: computation account validated through BLS verification
+    pub computation_account: UncheckedAccount<'info>,
     #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
     /// CHECK: instructions sysvar
     pub instructions_sysvar: AccountInfo<'info>,
@@ -107,10 +121,10 @@ pub fn handler(
         next_billing_ts
     );
 
-    let args = vec![
-        Argument::PlaintextU64(started_at),
-        Argument::PlaintextU64(next_billing_ts),
-    ];
+    let args = ArgBuilder::new()
+        .plaintext_u64(started_at)
+        .plaintext_u64(next_billing_ts)
+        .build();
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
@@ -119,12 +133,16 @@ pub fn handler(
         computation_offset,
         args,
         None,
-        vec![CreateSubscriptionMetadataCallback::callback_ix(&[
-            CallbackAccount {
+        vec![CreateSubscriptionMetadataCallback::callback_ix(
+            computation_offset,
+            &ctx.accounts.mxe_account,
+            &[CallbackAccount {
                 pubkey: ctx.accounts.user_subscriptions.key(),
                 is_writable: true,
-            },
-        ])],
+            }],
+        )?],
+        1,
+        0,
     )?;
 
     msg!("CreateSubscriptionMetadata: queued computation");
@@ -133,13 +151,22 @@ pub fn handler(
 
 pub fn handle_callback(
     ctx: Context<CreateSubscriptionMetadataCallback>,
-    output: ComputationOutputs<CreateSubscriptionMetadataOutput>,
+    output: SignedComputationOutputs<CreateSubscriptionMetadataOutput>,
 ) -> Result<()> {
     msg!("CreateSubscriptionMetadata callback: START");
 
-    let metadata_enc = match output {
-        ComputationOutputs::Success(CreateSubscriptionMetadataOutput { field_0 }) => field_0,
-        _ => return Err(ErrorCode::AbortedComputation.into()),
+    let metadata_enc = match output.verify_output(
+        &ctx.accounts.cluster_account,
+        &ctx.accounts.computation_account,
+    ) {
+        Ok(CreateSubscriptionMetadataOutput { field_0 }) => field_0,
+        Err(err) => {
+            msg!(
+                "CreateSubscriptionMetadata callback verification failed {}",
+                err
+            );
+            return Err(ErrorCode::AbortedComputation.into());
+        }
     };
 
     msg!(

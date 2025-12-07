@@ -2,12 +2,10 @@ use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::CallbackAccount;
 
-use crate::{SignerAccount, COMP_DEF_OFFSET_PROCESS_SUBSCRIPTION_PAYMENT};
-use crate::subly::constants::{
-    BILLING_PERIOD_SECONDS, CONFIG_SEED, USER_SUBSCRIPTIONS_SEED,
-};
+use crate::subly::constants::{BILLING_PERIOD_SECONDS, CONFIG_SEED, USER_SUBSCRIPTIONS_SEED};
 use crate::subly::error::ErrorCode;
 use crate::subly::state::{ConfidentialBundle, SublyConfig, UserSubscriptions};
+use crate::{SignerAccount, COMP_DEF_OFFSET_PROCESS_SUBSCRIPTION_PAYMENT};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct RecordSubscriptionPaymentArgs {
@@ -72,19 +70,23 @@ pub struct RecordSubscriptionPayment<'info> {
     pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(
         mut,
-        address = derive_mempool_pda!()
+        address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     /// CHECK: checked by arcium macros
     pub mempool_account: UncheckedAccount<'info>,
     #[account(
         mut,
-        address = derive_execpool_pda!()
+        address = derive_execpool_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     /// CHECK: checked by arcium macros
     pub executing_pool: UncheckedAccount<'info>,
     #[account(
         mut,
-        address = derive_comp_pda!(computation_offset)
+        address = derive_comp_pda!(
+            computation_offset,
+            mxe_account,
+            ErrorCode::ClusterNotSet
+        )
     )]
     /// CHECK: checked by arcium macros
     pub computation_account: UncheckedAccount<'info>,
@@ -92,7 +94,7 @@ pub struct RecordSubscriptionPayment<'info> {
     pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(
         mut,
-        address = derive_cluster_pda!(mxe_account)
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(
@@ -108,10 +110,20 @@ pub struct RecordSubscriptionPayment<'info> {
 
 #[callback_accounts("process_subscription_payment")]
 #[derive(Accounts)]
-pub struct RecordSubscriptionPaymentCallback<'info> {
+pub struct ProcessSubscriptionPaymentCallback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_PROCESS_SUBSCRIPTION_PAYMENT))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(
+        mut,
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
+    )]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut)]
+    /// CHECK: computation account validated through BLS verification
+    pub computation_account: UncheckedAccount<'info>,
     #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
     /// CHECK: instructions sysvar
     pub instructions_sysvar: AccountInfo<'info>,
@@ -178,20 +190,20 @@ pub fn handler(
     let sub_nonce = u128::from_le_bytes(subscription.encrypted_data.nonce);
     let meta_nonce = u128::from_le_bytes(subscription.encrypted_metadata.nonce);
 
-    let computation_args = vec![
-        Argument::PlaintextU64(args.subscription_id),
-        Argument::ArcisPubkey(subscription.encrypted_data.encryption_key),
-        Argument::PlaintextU128(sub_nonce),
-        Argument::EncryptedU64(subscription.encrypted_data.ciphertexts[0]),
-        Argument::EncryptedU64(subscription.encrypted_data.ciphertexts[1]),
-        Argument::PlaintextU128(meta_nonce),
-        Argument::EncryptedU64(subscription.encrypted_metadata.ciphertexts[0]),
-        Argument::EncryptedU64(subscription.encrypted_metadata.ciphertexts[1]),
-        Argument::EncryptedU64(subscription.encrypted_metadata.ciphertexts[2]),
-        Argument::EncryptedU64(subscription.encrypted_metadata.ciphertexts[3]),
-        Argument::PlaintextU64(paid_ts_u64),
-        Argument::PlaintextU64(billing_period_seconds),
-    ];
+    let computation_args = ArgBuilder::new()
+        .plaintext_u64(args.subscription_id)
+        .x25519_pubkey(subscription.encrypted_data.encryption_key)
+        .plaintext_u128(sub_nonce)
+        .encrypted_u64(subscription.encrypted_data.ciphertexts[0])
+        .encrypted_u64(subscription.encrypted_data.ciphertexts[1])
+        .plaintext_u128(meta_nonce)
+        .encrypted_u64(subscription.encrypted_metadata.ciphertexts[0])
+        .encrypted_u64(subscription.encrypted_metadata.ciphertexts[1])
+        .encrypted_u64(subscription.encrypted_metadata.ciphertexts[2])
+        .encrypted_u64(subscription.encrypted_metadata.ciphertexts[3])
+        .plaintext_u64(paid_ts_u64)
+        .plaintext_u64(billing_period_seconds)
+        .build();
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
@@ -200,27 +212,36 @@ pub fn handler(
         computation_offset,
         computation_args,
         None,
-        vec![RecordSubscriptionPaymentCallback::callback_ix(&[
-            CallbackAccount {
-                pubkey: ctx.accounts.user_subscriptions.key(),
-                is_writable: true,
-            },
-            CallbackAccount {
-                pubkey: ctx.accounts.config.key(),
-                is_writable: false,
-            },
-        ])],
+        vec![ProcessSubscriptionPaymentCallback::callback_ix(
+            computation_offset,
+            &ctx.accounts.mxe_account,
+            &[
+                CallbackAccount {
+                    pubkey: ctx.accounts.user_subscriptions.key(),
+                    is_writable: true,
+                },
+                CallbackAccount {
+                    pubkey: ctx.accounts.config.key(),
+                    is_writable: false,
+                },
+            ],
+        )?],
+        1,
+        0,
     )?;
 
     Ok(())
 }
 
 pub fn handle_callback(
-    ctx: Context<RecordSubscriptionPaymentCallback>,
-    output: ComputationOutputs<ProcessSubscriptionPaymentOutput>,
+    ctx: Context<ProcessSubscriptionPaymentCallback>,
+    output: SignedComputationOutputs<ProcessSubscriptionPaymentOutput>,
 ) -> Result<()> {
-    let (metadata_enc, is_due, amount, subscription_id, payment_ts) = match output {
-        ComputationOutputs::Success(ProcessSubscriptionPaymentOutput {
+    let (metadata_enc, is_due, amount, subscription_id, payment_ts) = match output.verify_output(
+        &ctx.accounts.cluster_account,
+        &ctx.accounts.computation_account,
+    ) {
+        Ok(ProcessSubscriptionPaymentOutput {
             field_0:
                 ProcessSubscriptionPaymentOutputStruct0 {
                     field_0,
@@ -230,7 +251,13 @@ pub fn handle_callback(
                     field_4,
                 },
         }) => (field_0, field_1, field_2, field_3, field_4),
-        _ => return Err(ErrorCode::AbortedComputation.into()),
+        Err(err) => {
+            msg!(
+                "RecordSubscriptionPayment callback verification failed {}",
+                err
+            );
+            return Err(ErrorCode::AbortedComputation.into());
+        }
     };
 
     require!(
@@ -255,9 +282,7 @@ pub fn handle_callback(
     subscription.encrypted_metadata = metadata_bundle;
 
     if is_due {
-        let paid_ts_i64: i64 = payment_ts
-            .try_into()
-            .map_err(|_| ErrorCode::MathOverflow)?;
+        let paid_ts_i64: i64 = payment_ts.try_into().map_err(|_| ErrorCode::MathOverflow)?;
 
         emit!(SubscriptionPaymentRecorded {
             operator: ctx.accounts.config.authority,

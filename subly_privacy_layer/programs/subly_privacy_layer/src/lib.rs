@@ -24,9 +24,8 @@ pub use subly::instructions::find_due_subscriptions::{
 };
 pub use subly::instructions::initialize::{Initialize, InitializeArgs};
 pub use subly::instructions::record_subscription_payment::{
-    InitProcessSubscriptionPaymentCompDef, RecordSubscriptionPayment,
-    RecordSubscriptionPaymentArgs, RecordSubscriptionPaymentCallback,
-    SubscriptionPaymentRecorded,
+    InitProcessSubscriptionPaymentCompDef, ProcessSubscriptionPaymentCallback,
+    RecordSubscriptionPayment, RecordSubscriptionPaymentArgs, SubscriptionPaymentRecorded,
 };
 pub use subly::instructions::register_paypal_recipient::{
     PayPalRecipientRegistered, RegisterPayPalRecipient, RegisterPayPalRecipientArgs,
@@ -199,8 +198,6 @@ pub mod subly_privacy_layer {
     ) -> Result<()> {
         init_comp_def(
             ctx.accounts,
-            true,
-            0,
             Some(CircuitSource::OffChain(OffChainCircuitSource {
                 source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/subscribe_service_testnet.arcis".to_string(),
                 hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
@@ -221,7 +218,7 @@ pub mod subly_privacy_layer {
     #[arcium_callback(encrypted_ix = "subscribe_service")]
     pub fn subscribe_service_callback(
         ctx: Context<SubscribeServiceCallback>,
-        output: ComputationOutputs<SubscribeServiceOutput>,
+        output: SignedComputationOutputs<SubscribeServiceOutput>,
     ) -> Result<()> {
         subly::instructions::subscribe_service::handle_callback(ctx, output)
     }
@@ -231,8 +228,6 @@ pub mod subly_privacy_layer {
     ) -> Result<()> {
         init_comp_def(
             ctx.accounts,
-            true,
-            0,
             Some(CircuitSource::OffChain(OffChainCircuitSource {
                 source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/unsubscribe_service_testnet.arcis".to_string(),
                 hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
@@ -246,14 +241,13 @@ pub mod subly_privacy_layer {
         ctx: Context<InitCreateSubscriptionMetadataCompDef>,
     ) -> Result<()> {
         init_comp_def(
-            ctx.accounts, 
-            true, 
-            0, 
+            ctx.accounts,
             Some(CircuitSource::OffChain(OffChainCircuitSource {
                 source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/create_subscription_metadata_testnet.arcis".to_string(),
                 hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
-            })), 
-            None)?;
+            })),
+            None,
+        )?;
         Ok(())
     }
 
@@ -274,7 +268,7 @@ pub mod subly_privacy_layer {
     #[arcium_callback(encrypted_ix = "create_subscription_metadata")]
     pub fn create_subscription_metadata_callback(
         ctx: Context<CreateSubscriptionMetadataCallback>,
-        output: ComputationOutputs<CreateSubscriptionMetadataOutput>,
+        output: SignedComputationOutputs<CreateSubscriptionMetadataOutput>,
     ) -> Result<()> {
         subly::instructions::create_subscription_metadata::handle_callback(ctx, output)
     }
@@ -283,14 +277,13 @@ pub mod subly_privacy_layer {
         ctx: Context<InitUpdateSubscriptionMetadataCompDef>,
     ) -> Result<()> {
         init_comp_def(
-            ctx.accounts, 
-            true, 
-            0, 
+            ctx.accounts,
             Some(CircuitSource::OffChain(OffChainCircuitSource {
                 source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/update_subscription_metadata_testnet.arcis".to_string(),
                 hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
-            })), 
-            None)?;
+            })),
+            None,
+        )?;
         Ok(())
     }
 
@@ -305,7 +298,7 @@ pub mod subly_privacy_layer {
     #[arcium_callback(encrypted_ix = "update_subscription_metadata")]
     pub fn update_subscription_metadata_callback(
         ctx: Context<UpdateSubscriptionMetadataCallback>,
-        output: ComputationOutputs<UpdateSubscriptionMetadataOutput>,
+        output: SignedComputationOutputs<UpdateSubscriptionMetadataOutput>,
     ) -> Result<()> {
         subly::instructions::update_subscription_metadata::handle_callback(ctx, output)
     }
@@ -314,14 +307,13 @@ pub mod subly_privacy_layer {
         ctx: Context<InitCancelSubscriptionMetadataCompDef>,
     ) -> Result<()> {
         init_comp_def(
-            ctx.accounts, 
-            true, 
-            0, 
+            ctx.accounts,
             Some(CircuitSource::OffChain(OffChainCircuitSource {
                 source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/cancel_subscription_metadata_testnet.arcis".to_string(),
                 hash: [0; 32], // Just use zeros for now - hash verification isn't enforced yet
-            })), 
-            None)?;
+            })),
+            None,
+        )?;
         Ok(())
     }
 
@@ -336,7 +328,7 @@ pub mod subly_privacy_layer {
     #[arcium_callback(encrypted_ix = "cancel_subscription_metadata")]
     pub fn cancel_subscription_metadata_callback(
         ctx: Context<CancelSubscriptionMetadataCallback>,
-        output: ComputationOutputs<CancelSubscriptionMetadataOutput>,
+        output: SignedComputationOutputs<CancelSubscriptionMetadataOutput>,
     ) -> Result<()> {
         subly::instructions::cancel_subscription_metadata::handle_callback(ctx, output)
     }
@@ -360,8 +352,6 @@ pub mod subly_privacy_layer {
     ) -> Result<()> {
         init_comp_def(
             ctx.accounts,
-            true,
-            0,
             Some(CircuitSource::OffChain(OffChainCircuitSource {
                 source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/process_subscription_payment_testnet.arcis".to_string(),
                 hash: [0; 32], // Hash verification disabled for now
@@ -381,8 +371,8 @@ pub mod subly_privacy_layer {
 
     #[arcium_callback(encrypted_ix = "process_subscription_payment")]
     pub fn record_subscription_payment_callback(
-        ctx: Context<RecordSubscriptionPaymentCallback>,
-        output: ComputationOutputs<ProcessSubscriptionPaymentOutput>,
+        ctx: Context<ProcessSubscriptionPaymentCallback>,
+        output: SignedComputationOutputs<ProcessSubscriptionPaymentOutput>,
     ) -> Result<()> {
         subly::instructions::record_subscription_payment::handle_callback(ctx, output)
     }
@@ -398,7 +388,7 @@ pub mod subly_privacy_layer {
     #[arcium_callback(encrypted_ix = "unsubscribe_service")]
     pub fn unsubscribe_service_callback(
         ctx: Context<UnsubscribeServiceCallback>,
-        output: ComputationOutputs<UnsubscribeServiceOutput>,
+        output: SignedComputationOutputs<UnsubscribeServiceOutput>,
     ) -> Result<()> {
         subly::instructions::unsubscribe_service::handle_callback(ctx, output)
     }

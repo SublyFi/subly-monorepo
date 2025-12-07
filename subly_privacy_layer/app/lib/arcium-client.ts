@@ -8,9 +8,18 @@ import {
   RescueCipher,
   x25519,
   getMXEPublicKey as getArciumMXEPublicKey,
+  getArciumProgramId,
+  getClusterAccAddress,
+  getCompDefAccAddress,
+  getComputationAccAddress,
+  getExecutingPoolAccAddress,
+  getMempoolAccAddress,
+  getMXEAccAddress,
 } from "@arcium-hq/client";
-import { createHash, randomBytes } from "crypto";
 import { AnchorProvider } from "@coral-xyz/anchor";
+import { createHash, randomBytes } from "crypto";
+
+export { getArciumEnv } from "@arcium-hq/client";
 
 // Re-export RescueCipher for use in other modules
 export { RescueCipher };
@@ -110,17 +119,13 @@ export function decryptConfidentialBundle(
 export async function awaitComputationFinalization(
   connection: Connection,
   computationOffset: bigint,
-  programId: PublicKey,
+  clusterOffset: number,
   maxRetries = 60,
   retryDelay = 2000
 ): Promise<string> {
-  // Derive computation account PDA
-  const offsetBytes = Buffer.alloc(8);
-  offsetBytes.writeBigUInt64LE(computationOffset);
-
-  const [computationAccount] = PublicKey.findProgramAddressSync(
-    [Buffer.from("computation"), offsetBytes],
-    new PublicKey("BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6") // Arcium program ID
+  const computationAccount = getComputationAccAddress(
+    clusterOffset,
+    computationOffset
   );
 
   let attempts = 0;
@@ -181,9 +186,7 @@ export function deriveCompDefOffset(instructionName: string): number {
 /**
  * Arcium program ID (mainnet/devnet)
  */
-export const ARCIUM_PROGRAM_ID = new PublicKey(
-  "BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6"
-);
+export const ARCIUM_PROGRAM_ID = getArciumProgramId();
 
 /**
  * Arcium fee pool account
@@ -204,34 +207,8 @@ export const ARCIUM_CLOCK_ACCOUNT = new PublicKey([
 /**
  * Get cluster account address for Arcium
  */
-export function getClusterAccountAddress(clusterId: number): PublicKey {
-  const clusterIdBytes = Buffer.alloc(4);
-  clusterIdBytes.writeUInt32LE(clusterId);
-
-  const [clusterAccount] = PublicKey.findProgramAddressSync(
-    [Buffer.from("cluster"), clusterIdBytes],
-    ARCIUM_PROGRAM_ID
-  );
-
-  return clusterAccount;
-}
-
-/**
- * Get computation definition account address
- */
-export function getCompDefAccountAddress(
-  programId: PublicKey,
-  offset: number
-): PublicKey {
-  const offsetBytes = Buffer.alloc(4);
-  offsetBytes.writeUInt32LE(offset);
-
-  const [compDefAccount] = PublicKey.findProgramAddressSync(
-    [Buffer.from("comp_def"), offsetBytes],
-    programId
-  );
-
-  return compDefAccount;
+export function getClusterAccountAddress(clusterOffset: number): PublicKey {
+  return getClusterAccAddress(clusterOffset);
 }
 
 /**
@@ -239,6 +216,7 @@ export function getCompDefAccountAddress(
  */
 export function getArciumAccounts(
   programId: PublicKey,
+  clusterOffset: number,
   computationOffset: bigint,
   compDefOffset = deriveCompDefOffset("subscribe_service")
 ) {
@@ -249,32 +227,15 @@ export function getArciumAccounts(
     programId
   );
 
-  const [mxeAccount] = PublicKey.findProgramAddressSync(
-    [Buffer.from("mxe")],
-    ARCIUM_PROGRAM_ID
+  const mxeAccount = getMXEAccAddress(programId);
+  const mempoolAccount = getMempoolAccAddress(clusterOffset);
+  const executingPool = getExecutingPoolAccAddress(clusterOffset);
+  const computationAccount = getComputationAccAddress(
+    clusterOffset,
+    computationOffset
   );
-
-  const [mempoolAccount] = PublicKey.findProgramAddressSync(
-    [Buffer.from("mempool")],
-    programId
-  );
-
-  const [executingPool] = PublicKey.findProgramAddressSync(
-    [Buffer.from("executing_pool")],
-    programId
-  );
-
-  const offsetBytes = Buffer.alloc(8);
-  offsetBytes.writeBigUInt64LE(computationOffset);
-
-  const [computationAccount] = PublicKey.findProgramAddressSync(
-    [Buffer.from("computation"), offsetBytes],
-    programId
-  );
-
-  const compDefAccount = getCompDefAccountAddress(programId, compDefOffset);
-
-  const clusterAccount = getClusterAccountAddress(0); // Cluster ID 0
+  const compDefAccount = getCompDefAccAddress(programId, compDefOffset);
+  const clusterAccount = getClusterAccAddress(clusterOffset);
 
   return {
     signPdaAccount,

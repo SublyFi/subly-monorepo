@@ -25,6 +25,7 @@ import {
   createSharedEncryptionBundle,
   getMXEPublicKey,
   getArciumAccounts,
+  getArciumEnv,
   deriveCompDefOffset,
   generateComputationOffset,
   decryptConfidentialBundle,
@@ -55,6 +56,7 @@ function resolveProgramId(): PublicKey {
 const SUBLY_IDL = rawIdl as Idl;
 
 const PROGRAM_ID = resolveProgramId();
+const ARCIUM_ENV = getArciumEnv();
 
 const CONFIG_SEED = Buffer.from("config");
 const USER_POSITION_SEED = Buffer.from("user_position");
@@ -585,6 +587,7 @@ export async function prepareSubscribeServiceTransaction(
   // Get Arcium accounts
   const arciumAccounts = getArciumAccounts(
     PROGRAM_ID,
+    ARCIUM_ENV.arciumClusterOffset,
     computationOffset,
     deriveCompDefOffset("subscribe_service")
   );
@@ -775,6 +778,7 @@ export async function prepareUnsubscribeServiceTransaction(
 
   const arciumAccounts = getArciumAccounts(
     PROGRAM_ID,
+    ARCIUM_ENV.arciumClusterOffset,
     computationOffset,
     deriveCompDefOffset("unsubscribe_service")
   );

@@ -176,8 +176,8 @@ const SERVICE_DEFINITIONS = [
 ];
 
 const ensureClusterEnv = () => {
-  if (!process.env.ARCIUM_CLUSTER_PUBKEY) {
-    process.env.ARCIUM_CLUSTER_PUBKEY = getClusterAccAddress(0).toBase58();
+  if (!process.env.ARCIUM_CLUSTER_OFFSET) {
+    process.env.ARCIUM_CLUSTER_OFFSET = "0";
   }
 };
 
@@ -192,6 +192,8 @@ describe("subly_privacy_layer confidential subscriptions", () => {
   ensureClusterEnv();
   const arciumEnv = getArciumEnv();
   const arciumProgramId = getArciumProgramId();
+  const clusterOffset = arciumEnv.arciumClusterOffset;
+  const clusterAccount = getClusterAccAddress(clusterOffset);
 
   const [configPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
@@ -338,19 +340,19 @@ describe("subly_privacy_layer confidential subscriptions", () => {
       compDefOffset,
       compDefAccount: compDefAccount.toBase58(),
       signPdaAccount: signPdaAccount.toBase58(),
-      clusterAccount: arciumEnv.arciumClusterPubkey.toBase58(),
+      clusterAccount: clusterAccount.toBase58(),
       mxeAccount: getMXEAccAddress(program.programId).toBase58(),
-      mempoolAccount: getMempoolAccAddress(program.programId).toBase58(),
-      executingPool: getExecutingPoolAccAddress(program.programId).toBase58(),
+      mempoolAccount: getMempoolAccAddress(clusterOffset).toBase58(),
+      executingPool: getExecutingPoolAccAddress(clusterOffset).toBase58(),
     });
 
     const toCheck = [
       ["compDefAccount", compDefAccount],
       ["signPdaAccount", signPdaAccount],
-      ["clusterAccount", arciumEnv.arciumClusterPubkey],
+      ["clusterAccount", clusterAccount],
       ["mxeAccount", getMXEAccAddress(program.programId)],
-      ["mempoolAccount", getMempoolAccAddress(program.programId)],
-      ["executingPool", getExecutingPoolAccAddress(program.programId)],
+      ["mempoolAccount", getMempoolAccAddress(clusterOffset)],
+      ["executingPool", getExecutingPoolAccAddress(clusterOffset)],
     ] as const;
     const accountInfos = await Promise.all(
       toCheck.map(async ([label, pubkey]) => {
@@ -691,14 +693,14 @@ describe("subly_privacy_layer confidential subscriptions", () => {
           userSubscriptions: userSubscriptionsPda,
           signPdaAccount,
           mxeAccount: getMXEAccAddress(program.programId),
-          mempoolAccount: getMempoolAccAddress(program.programId),
-          executingPool: getExecutingPoolAccAddress(program.programId),
+          mempoolAccount: getMempoolAccAddress(clusterOffset),
+          executingPool: getExecutingPoolAccAddress(clusterOffset),
           computationAccount: getComputationAccAddress(
-            program.programId,
+            clusterOffset,
             computationOffset
           ),
           compDefAccount,
-          clusterAccount: arciumEnv.arciumClusterPubkey,
+          clusterAccount,
           poolAccount: ARCIUM_FEE_POOL_ACCOUNT,
           clockAccount: ARCIUM_CLOCK_ACCOUNT,
           systemProgram: SystemProgram.programId,
@@ -712,10 +714,9 @@ describe("subly_privacy_layer confidential subscriptions", () => {
     expect(subscribeSig).to.be.a("string");
 
     const finalizeSig = await awaitComputationFinalization(
-      provider as anchor.AnchorProvider,
+      provider.connection,
       computationOffset,
-      program.programId,
-      "confirmed"
+      clusterOffset
     );
 
     const finalEvents = await fetchEventsForSignature(

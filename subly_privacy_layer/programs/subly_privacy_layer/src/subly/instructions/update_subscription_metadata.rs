@@ -47,19 +47,23 @@ pub struct UpdateSubscriptionMetadata<'info> {
     pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(
         mut,
-        address = derive_mempool_pda!()
+        address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     /// CHECK: checked by arcium macros
     pub mempool_account: UncheckedAccount<'info>,
     #[account(
         mut,
-        address = derive_execpool_pda!()
+        address = derive_execpool_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     /// CHECK: checked by arcium macros
     pub executing_pool: UncheckedAccount<'info>,
     #[account(
         mut,
-        address = derive_comp_pda!(computation_offset)
+        address = derive_comp_pda!(
+            computation_offset,
+            mxe_account,
+            ErrorCode::ClusterNotSet
+        )
     )]
     /// CHECK: checked by arcium macros
     pub computation_account: UncheckedAccount<'info>,
@@ -67,7 +71,7 @@ pub struct UpdateSubscriptionMetadata<'info> {
     pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(
         mut,
-        address = derive_cluster_pda!(mxe_account)
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(
@@ -87,6 +91,16 @@ pub struct UpdateSubscriptionMetadataCallback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_UPDATE_SUBSCRIPTION_METADATA))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(
+        mut,
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
+    )]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut)]
+    /// CHECK: computation account validated through BLS verification
+    pub computation_account: UncheckedAccount<'info>,
     #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
     /// CHECK: instructions sysvar
     pub instructions_sysvar: AccountInfo<'info>,
@@ -124,7 +138,7 @@ pub fn handler(
 
 pub fn handle_callback(
     _ctx: Context<UpdateSubscriptionMetadataCallback>,
-    _output: ComputationOutputs<UpdateSubscriptionMetadataOutput>,
+    _output: SignedComputationOutputs<UpdateSubscriptionMetadataOutput>,
 ) -> Result<()> {
     msg!("UpdateSubscriptionMetadata callback: not yet implemented");
     Err(ErrorCode::AbortedComputation.into())
