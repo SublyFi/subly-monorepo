@@ -169,4 +169,70 @@ mod circuits {
             transition_valid.reveal(),
         )
     }
+
+    /// Checks whether a subscription is due, reveals the payable amount,
+    /// and updates the encrypted MXE-only metadata with the new timestamps.
+    ///
+    /// # Arguments
+    /// * `subscription_ctxt` - Encrypted subscription info (service_id, monthly_price)
+    /// * `metadata_ctxt` - MXE-encrypted metadata (started_at, last_payment_ts, next_billing_ts, status)
+    /// * `current_ts` - Current timestamp in seconds (plaintext)
+    /// * `billing_period_seconds` - Billing period length (plaintext)
+    ///
+    /// # Returns
+    /// * Updated encrypted metadata (MXE)
+    /// * Boolean revealing whether payment is due
+    /// * Plaintext payable amount (0 if not due, else monthly_price)
+    /// * Echoed subscription_id (plaintext) for downstream routing
+    /// * Echoed payment timestamp (plaintext) for auditing
+    #[instruction]
+    pub fn process_subscription_payment(
+        subscription_id: u64,
+        subscription_ctxt: Enc<Shared, SubscriptionInfo>,
+        metadata_ctxt: Enc<Mxe, SubscriptionMetadata>,
+        current_ts: u64,
+        billing_period_seconds: u64,
+    ) -> (Enc<Mxe, SubscriptionMetadata>, bool, u64, u64, u64) {
+        let subscription = subscription_ctxt.to_arcis();
+        let mut metadata = metadata_ctxt.to_arcis();
+
+        // Safely clamp timestamps into i64 domain
+        let current_ts_i64 = if current_ts > i64::MAX as u64 {
+            i64::MAX
+        } else {
+            current_ts as i64
+        };
+        let billing_period_i64 = if billing_period_seconds > i64::MAX as u64 {
+            i64::MAX
+        } else {
+            billing_period_seconds as i64
+        };
+
+        let is_active = metadata.status == 0;
+        let is_due = is_active && current_ts_i64 >= metadata.next_billing_ts;
+
+        if is_due {
+            metadata.last_payment_ts = current_ts_i64;
+            let next_billing = metadata.next_billing_ts + billing_period_i64;
+            // Prevent wraparound on the MPC side
+            let overflow = next_billing < metadata.next_billing_ts;
+            if !overflow {
+                metadata.next_billing_ts = next_billing;
+            }
+        }
+
+        let payable_amount = if is_due {
+            subscription.monthly_price
+        } else {
+            0
+        };
+
+        (
+            metadata_ctxt.owner.from_arcis(metadata),
+            is_due.reveal(),
+            payable_amount.reveal(),
+            subscription_id.reveal(),
+            current_ts.reveal(),
+        )
+    }
 }

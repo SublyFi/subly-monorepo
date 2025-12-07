@@ -1,8 +1,13 @@
 use anchor_lang::prelude::*;
+use arcium_anchor::prelude::*;
+use arcium_client::idl::arcium::types::CallbackAccount;
 
-use crate::subly::constants::{CONFIG_SEED, USER_SUBSCRIPTIONS_SEED};
+use crate::{SignerAccount, COMP_DEF_OFFSET_PROCESS_SUBSCRIPTION_PAYMENT};
+use crate::subly::constants::{
+    BILLING_PERIOD_SECONDS, CONFIG_SEED, USER_SUBSCRIPTIONS_SEED,
+};
 use crate::subly::error::ErrorCode;
-use crate::subly::state::{SublyConfig, UserSubscriptions};
+use crate::subly::state::{ConfidentialBundle, SublyConfig, UserSubscriptions};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct RecordSubscriptionPaymentArgs {
@@ -15,16 +20,36 @@ pub struct SubscriptionPaymentRecorded {
     pub operator: Pubkey,
     pub user: Pubkey,
     pub paid_ts: i64,
-    // subscription_id and status are not exposed for privacy
+    pub amount_usdc: u64,
 }
 
+#[init_computation_definition_accounts("process_subscription_payment", operator)]
 #[derive(Accounts)]
+pub struct InitProcessSubscriptionPaymentCompDef<'info> {
+    #[account(mut)]
+    pub operator: Signer<'info>,
+    #[account(
+        mut,
+        address = derive_mxe_pda!()
+    )]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: comp_def_account, checked by arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+#[queue_computation_accounts("process_subscription_payment", operator)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
 pub struct RecordSubscriptionPayment<'info> {
     #[account(
         seeds = [CONFIG_SEED.as_bytes()],
         bump = config.bump,
     )]
     pub config: Account<'info, SublyConfig>,
+    #[account(mut)]
     pub operator: Signer<'info>,
     /// CHECK: used only for PDA seed validation
     pub user: UncheckedAccount<'info>,
@@ -33,11 +58,75 @@ pub struct RecordSubscriptionPayment<'info> {
         seeds = [USER_SUBSCRIPTIONS_SEED.as_bytes(), user.key().as_ref()],
         bump = user_subscriptions.bump,
     )]
+    pub user_subscriptions: Box<Account<'info, UserSubscriptions>>,
+    #[account(
+        init_if_needed,
+        space = 9,
+        payer = operator,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(
+        mut,
+        address = derive_mempool_pda!()
+    )]
+    /// CHECK: checked by arcium macros
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        address = derive_execpool_pda!()
+    )]
+    /// CHECK: checked by arcium macros
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        address = derive_comp_pda!(computation_offset)
+    )]
+    /// CHECK: checked by arcium macros
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_PROCESS_SUBSCRIPTION_PAYMENT))]
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
+    #[account(
+        mut,
+        address = derive_cluster_pda!(mxe_account)
+    )]
+    pub cluster_account: Box<Account<'info, Cluster>>,
+    #[account(
+        mut,
+        address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS,
+    )]
+    pub pool_account: Account<'info, FeePool>,
+    #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Account<'info, ClockAccount>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("process_subscription_payment")]
+#[derive(Accounts)]
+pub struct RecordSubscriptionPaymentCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_PROCESS_SUBSCRIPTION_PAYMENT))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instructions sysvar
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(mut)]
     pub user_subscriptions: Account<'info, UserSubscriptions>,
+    #[account(
+        seeds = [CONFIG_SEED.as_bytes()],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, SublyConfig>,
 }
 
 pub fn handler(
     ctx: Context<RecordSubscriptionPayment>,
+    computation_offset: u64,
     args: RecordSubscriptionPaymentArgs,
 ) -> Result<()> {
     let clock = Clock::get()?;
@@ -48,6 +137,7 @@ pub fn handler(
         ctx.accounts.operator.key(),
         ErrorCode::UnauthorizedAuthority
     );
+    ctx.accounts.config.ensure_active()?;
 
     let user_key = ctx.accounts.user.key();
     let user_bump = ctx.accounts.user_subscriptions.bump;
@@ -55,27 +145,127 @@ pub fn handler(
         .user_subscriptions
         .ensure_owner(user_key, user_bump);
 
-    // Find subscription to ensure it exists
-    let _subscription = ctx
+    require!(
+        ctx.accounts.user_subscriptions.paypal_configured,
+        ErrorCode::PayPalInfoMissing
+    );
+
+    let subscription = ctx
         .accounts
         .user_subscriptions
         .subscriptions
         .iter()
         .find(|s| s.id == args.subscription_id)
+        .cloned()
         .ok_or(ErrorCode::SubscriptionNotFound)?;
 
-    // TODO: Queue update_subscription_metadata MPC instruction to update:
-    // - last_payment_ts
-    // - next_billing_ts
-    // - status (if needed)
-    msg!("NOTICE: Payment recording now requires MPC call to update_subscription_metadata");
-    msg!("This will update encrypted timestamps in encrypted_metadata field");
+    require!(
+        subscription.encrypted_data.ciphertext_count >= 2,
+        ErrorCode::InvalidEncryptedPayload
+    );
+    require!(
+        subscription.encrypted_metadata.ciphertext_count >= 4,
+        ErrorCode::SubscriptionNotPayable
+    );
 
-    emit!(SubscriptionPaymentRecorded {
-        operator: ctx.accounts.operator.key(),
-        user: ctx.accounts.user.key(),
-        paid_ts,
-    });
+    let paid_ts_u64: u64 = paid_ts
+        .try_into()
+        .map_err(|_| ErrorCode::SubscriptionNotPayable)?;
+    let billing_period_seconds: u64 = BILLING_PERIOD_SECONDS
+        .try_into()
+        .map_err(|_| ErrorCode::MathOverflow)?;
+
+    let sub_nonce = u128::from_le_bytes(subscription.encrypted_data.nonce);
+    let meta_nonce = u128::from_le_bytes(subscription.encrypted_metadata.nonce);
+
+    let computation_args = vec![
+        Argument::PlaintextU64(args.subscription_id),
+        Argument::ArcisPubkey(subscription.encrypted_data.encryption_key),
+        Argument::PlaintextU128(sub_nonce),
+        Argument::EncryptedU64(subscription.encrypted_data.ciphertexts[0]),
+        Argument::EncryptedU64(subscription.encrypted_data.ciphertexts[1]),
+        Argument::PlaintextU128(meta_nonce),
+        Argument::EncryptedU64(subscription.encrypted_metadata.ciphertexts[0]),
+        Argument::EncryptedU64(subscription.encrypted_metadata.ciphertexts[1]),
+        Argument::EncryptedU64(subscription.encrypted_metadata.ciphertexts[2]),
+        Argument::EncryptedU64(subscription.encrypted_metadata.ciphertexts[3]),
+        Argument::PlaintextU64(paid_ts_u64),
+        Argument::PlaintextU64(billing_period_seconds),
+    ];
+
+    ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+
+    queue_computation(
+        ctx.accounts,
+        computation_offset,
+        computation_args,
+        None,
+        vec![RecordSubscriptionPaymentCallback::callback_ix(&[
+            CallbackAccount {
+                pubkey: ctx.accounts.user_subscriptions.key(),
+                is_writable: true,
+            },
+            CallbackAccount {
+                pubkey: ctx.accounts.config.key(),
+                is_writable: false,
+            },
+        ])],
+    )?;
+
+    Ok(())
+}
+
+pub fn handle_callback(
+    ctx: Context<RecordSubscriptionPaymentCallback>,
+    output: ComputationOutputs<ProcessSubscriptionPaymentOutput>,
+) -> Result<()> {
+    let (metadata_enc, is_due, amount, subscription_id, payment_ts) = match output {
+        ComputationOutputs::Success(ProcessSubscriptionPaymentOutput {
+            field_0:
+                ProcessSubscriptionPaymentOutputStruct0 {
+                    field_0,
+                    field_1,
+                    field_2,
+                    field_3,
+                    field_4,
+                },
+        }) => (field_0, field_1, field_2, field_3, field_4),
+        _ => return Err(ErrorCode::AbortedComputation.into()),
+    };
+
+    require!(
+        metadata_enc.ciphertexts.len() >= 4,
+        ErrorCode::InvalidEncryptedPayload
+    );
+
+    let metadata_bundle = ConfidentialBundle::from_slice(
+        &metadata_enc.ciphertexts[..4],
+        metadata_enc.nonce.to_le_bytes(),
+        [0u8; 32],
+    )?;
+
+    let subscription = ctx
+        .accounts
+        .user_subscriptions
+        .subscriptions
+        .iter_mut()
+        .find(|s| s.id == subscription_id)
+        .ok_or(ErrorCode::SubscriptionNotFound)?;
+
+    subscription.encrypted_metadata = metadata_bundle;
+
+    if is_due {
+        let paid_ts_i64: i64 = payment_ts
+            .try_into()
+            .map_err(|_| ErrorCode::MathOverflow)?;
+
+        emit!(SubscriptionPaymentRecorded {
+            operator: ctx.accounts.config.authority,
+            user: ctx.accounts.user_subscriptions.owner,
+            paid_ts: paid_ts_i64,
+            amount_usdc: amount,
+        });
+    }
 
     Ok(())
 }

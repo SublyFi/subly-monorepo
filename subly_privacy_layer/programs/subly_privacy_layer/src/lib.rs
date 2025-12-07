@@ -5,6 +5,7 @@ use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::{CircuitSource, OffChainCircuitSource};
 use subly::instructions::cancel_subscription_metadata::CancelSubscriptionMetadataOutput;
 use subly::instructions::create_subscription_metadata::CreateSubscriptionMetadataOutput;
+use subly::instructions::record_subscription_payment::ProcessSubscriptionPaymentOutput;
 use subly::instructions::subscribe_service::SubscribeServiceOutput;
 use subly::instructions::unsubscribe_service::UnsubscribeServiceOutput;
 use subly::instructions::update_subscription_metadata::UpdateSubscriptionMetadataOutput;
@@ -23,7 +24,9 @@ pub use subly::instructions::find_due_subscriptions::{
 };
 pub use subly::instructions::initialize::{Initialize, InitializeArgs};
 pub use subly::instructions::record_subscription_payment::{
-    RecordSubscriptionPayment, RecordSubscriptionPaymentArgs, SubscriptionPaymentRecorded,
+    InitProcessSubscriptionPaymentCompDef, RecordSubscriptionPayment,
+    RecordSubscriptionPaymentArgs, RecordSubscriptionPaymentCallback,
+    SubscriptionPaymentRecorded,
 };
 pub use subly::instructions::register_paypal_recipient::{
     PayPalRecipientRegistered, RegisterPayPalRecipient, RegisterPayPalRecipientArgs,
@@ -107,6 +110,14 @@ pub mod __client_accounts_record_subscription_payment {
     pub use crate::subly::instructions::record_subscription_payment::__client_accounts_record_subscription_payment::*;
 }
 
+pub mod __client_accounts_init_process_subscription_payment_comp_def {
+    pub use crate::subly::instructions::record_subscription_payment::__client_accounts_init_process_subscription_payment_comp_def::*;
+}
+
+pub mod __client_accounts_record_subscription_payment_callback {
+    pub use crate::subly::instructions::record_subscription_payment::__client_accounts_record_subscription_payment_callback::*;
+}
+
 pub mod __client_accounts_unsubscribe_service {
     pub use crate::subly::instructions::unsubscribe_service::__client_accounts_unsubscribe_service::*;
 }
@@ -151,6 +162,8 @@ const COMP_DEF_OFFSET_UPDATE_SUBSCRIPTION_METADATA: u32 =
 const COMP_DEF_OFFSET_CANCEL_SUBSCRIPTION_METADATA: u32 =
     comp_def_offset("cancel_subscription_metadata");
 const COMP_DEF_OFFSET_UNSUBSCRIBE_SERVICE: u32 = comp_def_offset("unsubscribe_service");
+const COMP_DEF_OFFSET_PROCESS_SUBSCRIPTION_PAYMENT: u32 =
+    comp_def_offset("process_subscription_payment");
 
 declare_id!("CKGaJ8QUBFuMSkB5wdk1R57Uj2Ypiy3FTfSHNNSb2yEV");
 
@@ -342,11 +355,36 @@ pub mod subly_privacy_layer {
         subly::instructions::find_due_subscriptions::handler(ctx, args)
     }
 
+    pub fn init_process_subscription_payment_comp_def(
+        ctx: Context<InitProcessSubscriptionPaymentCompDef>,
+    ) -> Result<()> {
+        init_comp_def(
+            ctx.accounts,
+            true,
+            0,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: "https://subly-arcium-bucket.s3.us-east-1.amazonaws.com/process_subscription_payment_testnet.arcis".to_string(),
+                hash: [0; 32], // Hash verification disabled for now
+            })),
+            None,
+        )?;
+        Ok(())
+    }
+
     pub fn record_subscription_payment(
         ctx: Context<RecordSubscriptionPayment>,
+        computation_offset: u64,
         args: RecordSubscriptionPaymentArgs,
     ) -> Result<()> {
-        subly::instructions::record_subscription_payment::handler(ctx, args)
+        subly::instructions::record_subscription_payment::handler(ctx, computation_offset, args)
+    }
+
+    #[arcium_callback(encrypted_ix = "process_subscription_payment")]
+    pub fn record_subscription_payment_callback(
+        ctx: Context<RecordSubscriptionPaymentCallback>,
+        output: ComputationOutputs<ProcessSubscriptionPaymentOutput>,
+    ) -> Result<()> {
+        subly::instructions::record_subscription_payment::handle_callback(ctx, output)
     }
 
     pub fn unsubscribe_service(
