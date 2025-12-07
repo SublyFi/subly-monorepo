@@ -165,7 +165,7 @@ const COMP_DEF_OFFSET_UNSUBSCRIBE_SERVICE: u32 = comp_def_offset("unsubscribe_se
 const COMP_DEF_OFFSET_PROCESS_SUBSCRIPTION_PAYMENT: u32 =
     comp_def_offset("process_subscription_payment");
 
-declare_id!("CKGaJ8QUBFuMSkB5wdk1R57Uj2Ypiy3FTfSHNNSb2yEV");
+declare_id!("5HPcn3vodrcMrdnYKi6SJMPigCJRoJxHFH6JngtHopDn");
 
 #[arcium_program]
 pub mod subly_privacy_layer {

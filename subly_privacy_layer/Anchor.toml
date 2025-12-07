@@ -5,10 +5,10 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-subly_privacy_layer = "CKGaJ8QUBFuMSkB5wdk1R57Uj2Ypiy3FTfSHNNSb2yEV"
-
 [programs.devnet]
+subly_privacy_layer = "5HPcn3vodrcMrdnYKi6SJMPigCJRoJxHFH6JngtHopDn"
+
+[programs.localnet]
 subly_privacy_layer = "CKGaJ8QUBFuMSkB5wdk1R57Uj2Ypiy3FTfSHNNSb2yEV"
 
 [registry]
